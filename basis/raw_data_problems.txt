@@ -1,0 +1,6 @@
+1 - missing data
+2 - 'NAN' data entries (instead of e.g. 'NaN')
+3 - inconsistent formatting in the timestamps (decimals are omitted when 0)
+4 - some data is simply entirely wrong, where e.g. the battery voltage is labelled as wind speed
+5 - synnøytangen has many datapoints where wind speed is e.g. 1000 m/s
+6 - synnøytangen has many datapoints where wind speed changes abruptly within REASONABLE values!!

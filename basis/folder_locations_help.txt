@@ -1,0 +1,6 @@
+PDF location:
+O:\Landsdekkende\Ferjefri E39\Fjordkryssinger\12_Bjørnafjorden\Fag\01 - Miljødata\Fag\Vind\Kjeller vindteknikk\WRF-simuleringer\WRF 2000-1027
+
+Raw data location (one of the following):
+O:\Utbygging\Fagress\BFA40 Konstruksjoner\10 Faggrupper\01 Metocean\Data\Vinddata\3d\Vind\KVT_Bjornafjorden_10m_ws10m_xyt.nc4
+C:\\Users\\bercos\\PycharmProjects\\Metocean\\raw_data\\WRF_500m\\KVT_Bjornafjorden_10m_ws10m_xyt.nc4
