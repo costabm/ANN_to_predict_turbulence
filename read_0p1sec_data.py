@@ -2,6 +2,8 @@
 Created: May, 2021
 Contact: bercos@vegvesen.no
 -----------------------------------------------------------------------------------------
+First, run all functions in this file.
+-----------------------------------------------------------------------------------------
 To read the raw 10 Hz data in a specific data interval, run e.g.:
 read_0p1sec_data_fun(masts_to_read=['synn','osp1','osp2','svar'], date_from_read='2017-12-21 00:15:00.0', date_to_read='2017-12-21 05:15:00.0', raw_data_folder='D:\PhD\Metocean_raw_data')
 -----------------------------------------------------------------------------------------
@@ -20,6 +22,7 @@ import datetime
 import more_itertools
 import json
 from dateutil.relativedelta import relativedelta
+import scipy.stats
 
 
 def empty_dataframe():
@@ -28,25 +31,45 @@ def empty_dataframe():
                                  'Sonic_C_U_Axis_Velocity', 'Sonic_C_V_Axis_Velocity', 'Sonic_C_W_Axis_Velocity'])
 
 
-def zscore_fun(x, window):
+def remove_outliers_using_zscore(df, window_to_test_zscore=100, min_periods=30, prob_interval_to_keep = 0.9999, warn_non_normal_data=True, warn_path='C:\example_folder'):
     """
-    :param x: Pandas Series
-    :param window: len of the window in number of items (not time)
-    :return: zscore
+    Args:
+        df: dataframe of wind raw data, already given for a specific mast
+        window_to_test_zscore: number of elements to use in the rolling window. e.g. 100 (= 10 sec)
+        min_periods: Minimum size of valid (!=nan) samples inside the window. Should be at least 30 for the zscore to be considered meaningful
+        prob_interval_to_keep: e.g. 0.9999 -> Only values in the interval with 99.99% chance of ocurring are considered. Otherwise, convert to 'nan'
+        warn_non_normal_data: True -> print the mean and std of the zscores observed whenever they are very different from those expected
+        warn_path: Pass a path to be printed, for easily finding where this dataframe was obtained from
+    Returns: dataframe where outliers are replaced by 'nan'
     """
-    r = x.rolling(window=window)
-    m = r.mean().shift(1)
-    s = r.std(ddof=0).shift(1)
-    z = (x-m)/s
-    return z
+    zscore_min, zscore_max = scipy.stats.norm.interval(prob_interval_to_keep)
+    df_no_time = df.drop('TIMESTAMP', axis=1)
+    df_rolling = df_no_time.rolling(window=window_to_test_zscore, min_periods=min_periods, center=True)  # min_periods =
+    rolling_mean = df_rolling.mean()
+    rolling_std = df_rolling.std()
+    rolling_zscore = (df_no_time - rolling_mean) / rolling_std
+    df_new = df_no_time[(zscore_min < rolling_zscore) & (rolling_zscore < zscore_max)]
+    df_new.insert(0, 'TIMESTAMP', df['TIMESTAMP'])
+    if warn_non_normal_data:
+        zscore_mean = rolling_zscore.mean()
+        zscore_std  = rolling_zscore.std()
+        if any(zscore_mean > 0.1) or any(zscore_mean < -0.1) or any(zscore_std < 0.8) or any(zscore_std > 1.2):
+            print(f"Warning: See the file {warn_path}. Data between {df['TIMESTAMP'].iloc[0]} and {df['TIMESTAMP'].iloc[-1]} should not be assumed normally-distributed, because:")
+            print('Mean of zscores (should be 0):')
+            print(zscore_mean)
+            print('STD of zscores (should be 1):')
+            print(zscore_std)
+    return df_new
 
 
-def read_0p1sec_data_fun(masts_to_read=['synn','osp1','osp2','svar'], date_from_read='2017-12-21 00:15:00.0', date_to_read='2017-12-21 05:15:00.0', raw_data_folder='D:\PhD\Metocean_raw_data'):
+def read_0p1sec_data_fun(masts_to_read=['synn','osp1','osp2','svar'], date_from_read='2017-12-21 00:15:00.0', date_to_read='2017-12-21 05:15:00.0', raw_data_folder='D:\PhD\Metocean_raw_data',
+                         remove_outliers=True):
     """
     :param masts_to_read: Choose from: 'osp1', 'osp2', 'svar', 'synn'
     :param date_from_read: date/time to read from
     :param date_to_read: date/time to read to
     :param raw_data_folder: Due to lack of permissions, the O: folder cannot be used directly. An external SDD was used to store the raw data
+    :param remove_outliers: To remove or not, the outliers. A Z score analysis is performed on 10 sec rolling window, and extreme values removed.
     :return: nested dictionary with all relevant data that satisfies the input requirements
     """
     # Reading the general excel files (that describe all raw files with info about each first and last timestamps), given: masts_to_read
@@ -76,11 +99,9 @@ def read_0p1sec_data_fun(masts_to_read=['synn','osp1','osp2','svar'], date_from_
                                                              'Sonic_B_U_Axis_Velocity': np.float32, 'Sonic_B_V_Axis_Velocity': np.float32, 'Sonic_B_W_Axis_Velocity': np.float32,
                                                              'Sonic_C_U_Axis_Velocity': np.float32, 'Sonic_C_V_Axis_Velocity': np.float32, 'Sonic_C_W_Axis_Velocity': np.float32})
                     df = df[(df['TIMESTAMP'] >= date_from_read) & (df['TIMESTAMP'] <= date_to_read)]  # droping all rows outside requested datetime interval
+                    if remove_outliers:
+                        df = remove_outliers_using_zscore(df, warn_non_normal_data=True, warn_path=file_path)
                     df_temp.append(df)
-                    # Filtering out outliers (besides the 1000 m/s already treated as nan)!
-                    # for column in ['Sonic_A_U_Axis_Velocity','Sonic_A_V_Axis_Velocity','Sonic_A_W_Axis_Velocity', 'Sonic_B_U_Axis_Velocity','Sonic_B_V_Axis_Velocity','Sonic_B_W_Axis_Velocity',
-                    #                'Sonic_C_U_Axis_Velocity','Sonic_C_V_Axis_Velocity','Sonic_C_W_Axis_Velocity']:
-                    #     zscores = zscore_fun(df[column], window=10)
                 except ValueError:
                     print(f'ValueError encountered when reading csv file. Discarding the following dataframe: {file_path}. Using empty dataframe instead.')
                     default_view_n_columns = pd.get_option("display.max_columns")

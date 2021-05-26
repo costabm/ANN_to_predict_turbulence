@@ -44,6 +44,7 @@ def strong_wind_events_1_anemometer(ts, U, U_cond_1=13.9, U_cond_2=17.2):
 def strong_wind_events_func():
     pass
 
+
 fname = '01-00-00_all_stats'
 with open(os.path.join(os.getcwd(), 'processed_data', fname), "r") as json_file:
     pro_data = json.load(json_file)
@@ -64,14 +65,16 @@ for mast in ['osp1', 'osp2', 'svar', 'synn']:
         storm_dict_all[mast][anem] = strong_wind_events_1_anemometer(ts=ts , U=V_Lw[0])
         print(f'N storms in {mast}-{anem}: ' + str(len(storm_dict_all[mast][anem]['ts'])))
         # storm_idxs, storm_ts, storm_U = storm_dict['idxs'], storm_dict['ts'], storm_dict['U']
+
+
 # Finding the general strong wind events, which satisfy the strond wind conditions at least at one anemometer:
-df_test = pd.DataFrame(storm_dict_all['osp2']['A'])
+df_test = pd.DataFrame(storm_dict_all['synn']['A'])
 
 
 
 
-ts_storms = storm_dict_all['synn']['A']['ts']
-U_storms = storm_dict_all['synn']['A']['U']
+ts_storms = storm_dict_all['svar']['A']['ts']
+U_storms =  storm_dict_all['svar']['A']['U']
 n_storms = len(U_storms)
 
 ts_flat = [item for sublist in ts_storms for item in sublist]
@@ -82,6 +85,7 @@ plt.figure(figsize=(20,4), dpi=300)
 for ts, U in zip(ts_storms, U_storms):
     plt.plot(ts, U, alpha=0.9, lw=0.2, color='blue')
     plt.axvspan(xmin=ts[0], xmax=ts[-1], color='orange')
+    print(np.max(U), ts[0], ts[-1])
 # plt.plot(pd.to_datetime(pro_data['osp1']['A']['ts']), V_Lw[1], label='v')
 # plt.plot(pd.to_datetime(pro_data['osp1']['A']['ts']), V_Lw[2], label='w')
 # plt.xlim(event[0], event[-1])
@@ -92,12 +96,24 @@ plt.show()
 # FINDING PROBLEM WITH SYNNØYTANGEN WIND SPEEDS (TOO HIGH!!)
 [(np.where(U_storms[i] > 1000)[0],i) for i in range(n_storms)]
 from read_0p1sec_data import read_0p1sec_data_fun
-synn_data = read_0p1sec_data_fun(masts_to_read=['synn'], date_from_read='2019-01-03 12:00:00.0', date_to_read='2019-01-03 13:00:00.0', raw_data_folder='D:\PhD\Metocean_raw_data')
+synn_data = read_0p1sec_data_fun(masts_to_read=['synn'], date_from_read='2019-03-27 01:20:00', date_to_read='2019-03-27 01:30:00', raw_data_folder='D:\PhD\Metocean_raw_data')
+svar_data = read_0p1sec_data_fun(masts_to_read=['svar'], date_from_read='2015-05-26 11:00:00', date_to_read='2015-05-26 12:00:00', raw_data_folder='D:\PhD\Metocean_raw_data')
+# Time period full of bad data that is hard to find!
+synn_data = read_0p1sec_data_fun(masts_to_read=['synn'], date_from_read='2019-01-03 12:19:30', date_to_read='2019-01-03 12:20:30', raw_data_folder='D:\PhD\Metocean_raw_data')
 
 # synn_data['synn'][synn_data['synn']['Sonic_A_U_Axis_Velocity'] > 2]
 
 synn_data['synn']['Sonic_A_U_Axis_Velocity'].isna().sum()
-test_rolling_mean = synn_data['synn']['Sonic_A_U_Axis_Velocity'].rolling(window=10).mean()
+
+
+test_rolling_mean = synn_data['synn'].drop('TIMESTAMP', axis=1).rolling(window=50, min_periods=10, center=True, closed='right').mean()
+test_rolling_std  = synn_data['synn'].drop('TIMESTAMP', axis=1).rolling(window=50, min_periods=10, center=True, closed='right').std()
+test_rolling_zscore = (synn_data['synn'].drop('TIMESTAMP', axis=1) - test_rolling_mean) / test_rolling_std
+
+m = r.mean().shift(1)
+s = r.std(ddof=0).shift(1)
+z = (x - m) / s
+
 test_rolling_mean.isna().sum()
 
 pd.merge  # todo: merge all anemometers (check outer vs inner merge)
