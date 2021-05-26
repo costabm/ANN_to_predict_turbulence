@@ -33,9 +33,11 @@ def empty_dataframe():
 
 def remove_outliers_using_zscore(df, window_to_test_zscore=100, min_periods=30, prob_interval_to_keep = 0.9999, warn_non_normal_data=True, warn_path='C:\example_folder'):
     """
+    Calculates the probability (using the "Z score") of each wind measurement, by using the moving mean and moving STD of the measurements (locally Gaussian) in a window centred at that observation.
+    Highly unlikely values (with probability of ocurring == 1 - prob_interval_to_keep) are converted to 'nan'
     Args:
         df: dataframe of wind raw data, already given for a specific mast
-        window_to_test_zscore: number of elements to use in the rolling window. e.g. 100 (= 10 sec)
+        window_to_test_zscore: number of elements to use in the rolling window. e.g. 100 (= 10 sec). Window should be more than double min_periods to avoid many unnecessary 'nan'
         min_periods: Minimum size of valid (!=nan) samples inside the window. Should be at least 30 for the zscore to be considered meaningful
         prob_interval_to_keep: e.g. 0.9999 -> Only values in the interval with 99.99% chance of ocurring are considered. Otherwise, convert to 'nan'
         warn_non_normal_data: True -> print the mean and std of the zscores observed whenever they are very different from those expected
@@ -251,8 +253,8 @@ def check_processed_data_has_same_len(data_processed):
         return False
 
 
-def process_data_fun(window='01:00:00', masts_to_read = ['synn', 'osp1', 'osp2', 'svar'], date_from_read = '2017-12-21 00:15:00.0', date_to_read = '2017-12-21 05:15:00.0',
-                        raw_data_folder = 'D:\PhD\Metocean_raw_data', check_data_has_same_lens=True, save_json=False):
+def process_data_fun(window='01:00:00', masts_to_read=['synn', 'osp1', 'osp2', 'svar'], date_from_read='2017-12-21 00:15:00.0', date_to_read='2017-12-21 05:15:00.0',
+                     raw_data_folder='D:\PhD\Metocean_raw_data', check_data_has_same_lens=True, save_json=False, json_fname_suffix=''):
     """
     :param window: str. Use '01:00:00' for 1h statistics. Use '00:10:00' for 10-min statistics. Other windows are possible as long as they are an integer factor of a 24 h period.
     :param masts_to_read: list. Choose from: 'osp1', 'osp2', 'svar', 'synn'
@@ -261,6 +263,7 @@ def process_data_fun(window='01:00:00', masts_to_read = ['synn', 'osp1', 'osp2',
     :param check_data_has_same_lens:  bool
     :param save_json: bool
     :param raw_data_folder: str. Due to lack of permissions, the O: folder cannot be used directly. An external SDD was used to store the raw data
+    :param json_fname_suffix: string to append to the file name when saving the data if save_json=True
     :return: nested dictionary with all 1-hour mean, std, and timestamp data, at the desired masts and time interval
     """
     data = read_0p1sec_data_fun(masts_to_read=masts_to_read, date_from_read=date_from_read, date_to_read=date_to_read, raw_data_folder=raw_data_folder)
@@ -305,20 +308,25 @@ def process_data_fun(window='01:00:00', masts_to_read = ['synn', 'osp1', 'osp2',
         if not check_processed_data_has_same_len(data_processed):
             print("The 10min/1h data has different size for different masts/anemometers!")
     if save_json:
-        fname = (window + '_stats_' + date_from_read[:-2] + '_' + date_to_read[:-2]).replace(" ", "_").replace(":","-")
+        fname = (window + '_stats_' + date_from_read[:-2] + '_' + date_to_read[:-2] + json_fname_suffix).replace(" ", "_").replace(":","-")
         save_processed_data(data_processed, fname=fname)
     return data_processed
 
 
-def create_processed_data_files(date_start=datetime.datetime.strptime('2015-01-01 00:00:00.0', '%Y-%m-%d %H:%M:%S.%f'), n_months=12*6, window='01:00:00'):
+def create_processed_data_files(date_start=datetime.datetime.strptime('2015-01-01 00:00:00.0', '%Y-%m-%d %H:%M:%S.%f'), n_months=12 * 6, window='01:00:00', json_fname_suffix=''):
     """
     Generates many processed data files, one month long each, given a start date and n_monts.
+    Args:
+        date_start: choose any date before the measurements start
+        window: time window of data processing. e.g. '01:00:00' or '00:10:00' for 1h or 10min statistics
+        n_months: num of months
+        json_fname_suffix: string to append to the file name when saving the data if save_json=True
     """
     dates_list = [date_start + relativedelta(months=1*m) for m in range(n_months+1)]
     for dt1, dt2 in zip(dates_list[:-1], dates_list[1:]):
         dt1_str = dt1.strftime('%Y-%m-%d %H:%M:%S.%f')[:-5]
         dt2_str = dt2.strftime('%Y-%m-%d %H:%M:%S.%f')[:-5]
-        process_data_fun(window=window, masts_to_read = ['synn', 'osp1', 'osp2', 'svar'], date_from_read=dt1_str, date_to_read=dt2_str, save_json=True)
+        process_data_fun(window=window, masts_to_read=['synn', 'osp1', 'osp2', 'svar'], date_from_read=dt1_str, date_to_read=dt2_str, save_json=True, json_fname_suffix=json_fname_suffix)
         print(f'Data is now processed, from {dt1_str} to {dt2_str}')
 
 
@@ -364,6 +372,3 @@ def compile_all_processed_data_into_1_file(stats_str='01-00-00', save_json=True)
     return pro_file
 
 
-
-# test
-# test 2
