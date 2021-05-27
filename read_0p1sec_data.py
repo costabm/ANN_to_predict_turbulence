@@ -173,6 +173,25 @@ def beta_cardinal_given_speed_towards_N_and_W(N,W):
     return angle + adjust_2pi
 
 
+def from_V_NWZ_dict_to_V_Lw(V_NWZ_dict, also_return_betas_c=False):
+    """
+    Args:
+        V_NWZ_dict: e.g. pro_data[mast][anem]['means'] or storm_dict[mast][anem]['means']
+        also_return_betas_c: Whether to include betas_c in the return or not
+    """
+    V_NWZ_N = np.array(V_NWZ_dict['to_North'])
+    V_NWZ_W = np.array(V_NWZ_dict['to_West'])
+    V_NWZ_Z = np.array(V_NWZ_dict['to_Zenith'])
+    V_NWZ = np.array([V_NWZ_N, V_NWZ_W, V_NWZ_Z])
+    betas_c = beta_cardinal_given_speed_towards_N_and_W(V_NWZ[0], V_NWZ[1])
+    T_uvw_NWZ = np.array([T_uvw_NWZ_fun(b) for b in betas_c])
+    V_Lw = np.einsum('tij,jt->it', T_uvw_NWZ, V_NWZ, optimize=True)  # Lw - Local wind coordinate system (U+u, v, w)
+    if also_return_betas_c:
+        return V_Lw, betas_c
+    else:
+        return V_Lw
+
+
 def check_if_ts_are_consecutive(list_of_timestamps, interval='01:00:00'):
     """
     :param list_of_timestamps: list
@@ -259,7 +278,8 @@ def fitted_spectral_quantities_to_raw_data():
 
 
 def process_data_fun(window='01:00:00', masts_to_read=['synn', 'osp1', 'osp2', 'svar'], date_from_read='2017-12-21 00:15:00.0', date_to_read='2017-12-21 05:15:00.0',
-                     raw_data_folder='D:\PhD\Metocean_raw_data', include_fitted_spectral_quantities=False, check_data_has_same_lens=True, save_json=False, save_as_storm=False, save_as_storm_name=''):
+                     raw_data_folder='D:\PhD\Metocean_raw_data', include_fitted_spectral_quantities=False, check_data_has_same_lens=True, save_json=False, save_in_folder='processed_data',
+                     save_fname_suffix=''):
     """
     :param window: str. Use '01:00:00' for 1h statistics. Use '00:10:00' for 10-min statistics. Other windows are possible as long as they are an integer factor of a 24 h period.
     :param masts_to_read: list. Choose from: 'osp1', 'osp2', 'svar', 'synn'
@@ -269,9 +289,9 @@ def process_data_fun(window='01:00:00', masts_to_read=['synn', 'osp1', 'osp2', '
     :param check_data_has_same_lens:  bool
     :param save_json: bool
     :param raw_data_folder: str. Due to lack of permissions, the O: folder cannot be used directly. An external SDD was used to store the raw data
-    :param save_as_storm: string to append to the file name when saving the data if save_json=True
-    :param save_as_storm_name: e.g. '_storm_1' for storm 1
-    :return: nested dictionary with all 1-hour mean, std, and timestamp data, at the desired masts and time interval
+    :param save_in_folder: string to append to the file name when saving the data if save_json=True
+    :param save_fname_suffix: e.g. '_storm_1' for storm 1
+    :return: nested dictionary with all 1-hour (or 10-min, or another interval) mean, covariance, and timestamp data, at the desired masts and time interval
     """
     data = read_0p1sec_data_fun(masts_to_read=masts_to_read, date_from_read=date_from_read, date_to_read=date_to_read, raw_data_folder=raw_data_folder)
     data_processed = {}
@@ -293,54 +313,54 @@ def process_data_fun(window='01:00:00', masts_to_read=['synn', 'osp1', 'osp2', '
             W_Gill = data[mast][f'Sonic_{anem}_W_Axis_Velocity'].values
             V_KVT = np.array([U_Gill, V_Gill, W_Gill])
             V_NWZ = T_NWZ_Gill_fun(mast, anem) @ V_KVT  # North-West-Zenith coordinate system
+            # KEEP THIS CODE: (can be useful if implementing
             # beta_c = beta_cardinal_given_speed_towards_N_and_W(V_NWZ[0], V_NWZ[1])
             # mean_beta_c = np.nanmean(beta_c)
             # V_Lw = T_uvw_NWZ_fun(mean_beta_c) @ V_NWZ  # Lw - Local wind coordinate system (U+u, v, w)
             # Performing the 1-hour or 10-min averages
             timestamps = []
             means = []
-            stds = []
+            cov = []
             availability = []
             for prev_time_idx, time_idx in zip(measured_precise_time_idxs[:-1], measured_precise_time_idxs[1:]):
                 assert prev_time_idx < time_idx, "Somehow there are still duplicate rows?"
                 V_NWZ_chunk = V_NWZ[:, prev_time_idx:time_idx]
                 if not np.isnan(V_NWZ_chunk).all():  # if there is at least some data
+                    V_NWZ_chunk_df = pd.DataFrame({'to_North': V_NWZ_chunk[0], 'to_West': V_NWZ_chunk[1], 'to_Zenith': V_NWZ_chunk[2]})
                     timestamps.append(ts.iloc[time_idx])
-                    means.append(np.nanmean(V_NWZ_chunk, axis=1, dtype='float32').tolist())
-                    stds.append( np.nanstd( V_NWZ_chunk, axis=1, dtype='float32').tolist())
-                    availability.append(np.array(1 - np.count_nonzero(np.isnan(V_NWZ_chunk), axis=1)/np.shape(V_NWZ_chunk)[-1], dtype='float32').tolist())
-                    if include_fitted_spectral_quantities:
-                        fitted_spectral_quantities_to_raw_data()
-                        raise NotImplementedError
+                    # means.append(np.nanmean(V_NWZ_chunk, axis=1, dtype='float32').tolist())  # OLD VERSION
+                    # availability.append(np.array(1 - np.count_nonzero(np.isnan(V_NWZ_chunk), axis=1)/np.shape(V_NWZ_chunk)[-1], dtype='float32').tolist())  # OLD VERSION
                     # description = 'The 3 axes in means, stds and availability are in the NWZ (North-West-Zenith) coordinate system. N means TOWARDS North'
-            data_processed[mast][anem] = {'ts':timestamps, 'means':means, 'stds':stds, 'availability':availability}  #, 'missedstamps':missed_timestamps, 'description':description}
+                    means.append(V_NWZ_chunk_df.mean().to_numpy(dtype='float32').tolist()) # To calculate the covariance matrix with nan values in the mix, pd.cov is necessary.
+                    cov.append(V_NWZ_chunk_df.cov().to_numpy(dtype='float32').tolist())
+                    availability.append((1-V_NWZ_chunk_df.isna().mean()).to_numpy(dtype='float32').tolist())
+                    if include_fitted_spectral_quantities:
+                        fitted_spectral_quantities_to_raw_data()  # then Lw coordinates should be stored perhaps, instead of NWZ...?
+                        raise NotImplementedError
+            data_processed[mast][anem] = {'ts':timestamps, 'means':means, 'covar':cov, 'availability':availability}  #, 'missedstamps':missed_timestamps, 'description':description}
     if check_data_has_same_lens:
         if not check_processed_data_has_same_len(data_processed):
             print("The 10min/1h data has different size for different masts/anemometers!")
     if save_json:
-        if save_as_storm:
-            fname = (window + '_stats_' + date_from_read[:-2] + '_' + date_to_read[:-2] + save_as_storm_name).replace(" ", "_").replace(":", "-")
-            save_processed_data(data_processed, foldername='processed_storm_data', fname=fname)
-        else:
-            fname = (window + '_stats_' + date_from_read[:-2] + '_' + date_to_read[:-2]).replace(" ", "_").replace(":", "-")
-            save_processed_data(data_processed, foldername='processed_data', fname=fname)
+        fname = (window + '_stats_' + date_from_read[:-2] + '_' + date_to_read[:-2] + save_fname_suffix).replace(" ", "_").replace(":", "-")
+        save_processed_data(data_processed, foldername=save_in_folder, fname=fname)
     return data_processed
 
 
-def create_processed_data_files(date_start=datetime.datetime.strptime('2015-01-01 00:00:00.0', '%Y-%m-%d %H:%M:%S.%f'), n_months=12 * 6, window='01:00:00', save_as_storm=False):
+def create_processed_data_files(date_start=datetime.datetime.strptime('2015-01-01 00:00:00.0', '%Y-%m-%d %H:%M:%S.%f'), n_months=12 * 6, window='01:00:00', save_in_folder='processed_data'):
     """
     Generates many processed data files, one month long each, given a start date and n_monts.
     Args:
         date_start: choose any date before the measurements start
         window: time window of data processing. e.g. '01:00:00' or '00:10:00' for 1h or 10min statistics
         n_months: num of months
-        json_fname_suffix: string to append to the file name when saving the data if save_json=True
+        save_in_folder: folder name
     """
     dates_list = [date_start + relativedelta(months=1*m) for m in range(n_months+1)]
     for dt1, dt2 in zip(dates_list[:-1], dates_list[1:]):
         dt1_str = dt1.strftime('%Y-%m-%d %H:%M:%S.%f')[:-5]
         dt2_str = dt2.strftime('%Y-%m-%d %H:%M:%S.%f')[:-5]
-        process_data_fun(window=window, masts_to_read=['synn', 'osp1', 'osp2', 'svar'], date_from_read=dt1_str, date_to_read=dt2_str, save_json=True, save_as_storm=save_as_storm)
+        process_data_fun(window=window, masts_to_read=['synn', 'osp1', 'osp2', 'svar'], date_from_read=dt1_str, date_to_read=dt2_str, save_json=True, save_in_folder=save_in_folder)
         print(f'Data is now processed, from {dt1_str} to {dt2_str}')
 
 
@@ -350,8 +370,8 @@ def create_empty_nested_dictionary():
         empty_dict[m] = {}
         for a in ['A', 'B', 'C']:
             empty_dict[m][a] = {}
-            for x in ['ts', 'means', 'stds', 'availability']:
-                if x == 'ts':
+            for x in ['ts', 'means', 'covars', 'availability']:
+                if x == 'ts' or x== 'covars':
                     empty_dict[m][a][x] = []
                 else:
                     empty_dict[m][a][x] = {}
@@ -360,7 +380,7 @@ def create_empty_nested_dictionary():
     return empty_dict
 
 
-def compile_all_processed_data_into_1_file(data_str='01-00-00_stats', save_str='01-00-00_all_stats', save_json=True, save_as_storm=False):
+def compile_all_processed_data_into_1_file(data_str='01-00-00_stats', save_str='01-00-00_all_stats', save_json=True, foldername='processed_data'):
     """
     Merging all json files that include data_str in their name, into one single json file
     """
@@ -374,18 +394,19 @@ def compile_all_processed_data_into_1_file(data_str='01-00-00_stats', save_str='
     for f in all_1h_files:
         for m in ['osp1', 'osp2', 'svar', 'synn']:
             for a in ['A','B','C']:
-                for x in ['ts', 'means', 'stds', 'availability']:
+                for x in ['ts', 'means', 'covars', 'availability']:
                     if f[m][a][x]:  # if there is data
-                        if x == 'ts':
+                        if x == 'ts' or x== 'covars':
                             pro_file[m][a][x] += f[m][a][x]
                         else:
                             for idx, d in enumerate(['to_North', 'to_West', 'to_Zenith']):
                                 pro_file[m][a][x][d] += np.array(f[m][a][x]).T.tolist()[idx]
     if save_json:
-        if save_as_storm:
-            save_processed_data(processed_data=pro_file, foldername='processed_storm_data', fname=save_str)
-        else:
-            save_processed_data(processed_data=pro_file, foldername='processed_data', fname=save_str)
+        save_processed_data(processed_data=pro_file, foldername=foldername, fname=save_str)
     return pro_file
+
+
+create_processed_data_files(date_start=datetime.datetime.strptime('2015-01-01 00:00:00.0', '%Y-%m-%d %H:%M:%S.%f'), n_months=12*6, window='01:00:00')
+
 
 

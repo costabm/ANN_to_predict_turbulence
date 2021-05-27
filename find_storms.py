@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import json
-from read_0p1sec_data import beta_cardinal_given_speed_towards_N_and_W, T_uvw_NWZ_fun, process_data_fun, compile_all_processed_data_into_1_file
+from read_0p1sec_data import process_data_fun, compile_all_processed_data_into_1_file, from_V_NWZ_dict_to_V_Lw
 from operator import itemgetter
 from itertools import groupby
 
@@ -57,34 +57,15 @@ def strong_wind_events_per_anem(ts, U, U_cond_1=13.9, U_cond_2=17.2):
     return {'ts': strong_wind_ts, 'U': strong_wind_U}
 
 
-def from_V_NWZ_dict_to_V_Lw(V_NWZ_dict, also_return_betas_c=False):
-    """
-    Args:
-        V_NWZ_dict: e.g. pro_data[mast][anem]['means'] or storm_dict[mast][anem]['means']
-        also_return_betas_c: Whether to include betas_c in the return or not
-    """
-    V_NWZ_N = np.array(V_NWZ_dict['to_North'])
-    V_NWZ_W = np.array(V_NWZ_dict['to_West'])
-    V_NWZ_Z = np.array(V_NWZ_dict['to_Zenith'])
-    V_NWZ = np.array([V_NWZ_N, V_NWZ_W, V_NWZ_Z])
-    betas_c = beta_cardinal_given_speed_towards_N_and_W(V_NWZ[0], V_NWZ[1])
-    T_uvw_NWZ = np.array([T_uvw_NWZ_fun(b) for b in betas_c])
-    V_Lw = np.einsum('tij,jt->it', T_uvw_NWZ, V_NWZ, optimize=True)  # Lw - Local wind coordinate system (U+u, v, w)
-    if also_return_betas_c:
-        return V_Lw, betas_c
-    else:
-        return V_Lw
-
-
-def strong_wind_events_per_anem_all_merged(fname='01-00-00_all_stats'):
+def strong_wind_events_per_anem_all_merged(input_fname='01-00-00_all_stats'):
     """
     All the individual strong wind events of each anemometer are merged together. This way, the timestamps where at least 1 anemometer is experiencing strong wind can be obtained.
     Only the mean wind
     Args:
-        fname: The name of the file containing all the info necessary. e.g. '01-00-00_all_stats' or '00-10-00_all_stats'
+        input_fname: The name of the file containing all the info necessary. e.g. '01-00-00_all_stats' or '00-10-00_all_stats'
     Returns: (df, dict) with all timestamps and wind speeds where at least 1 anem. feels strong wind, BUT, concomitant non-strong wind speeds (concomitant w/ strong winds elsewhere) are still missing!
     """
-    with open(os.path.join(os.getcwd(), 'processed_data', fname), "r") as json_file:
+    with open(os.path.join(os.getcwd(), 'processed_data', input_fname), "r") as json_file:
         pro_data = json.load(json_file)
     # Finding strong wind events (also denoted here as storms) indepentently for each anemometer
     storm_df_all = pd.DataFrame(columns=['ts'])
@@ -125,7 +106,7 @@ def listing_consecutive_time_stamps(list_of_timestamps, interval='01:00:00'):
 
 
 def find_storm_timestamps():
-    df_storms_concomit_wind_missing, dict_storms_concomit_wind_missing = strong_wind_events_per_anem_all_merged(fname='01-00-00_all_stats')
+    df_storms_concomit_wind_missing, dict_storms_concomit_wind_missing = strong_wind_events_per_anem_all_merged(input_fname='01-00-00_all_stats')
     ts_storms_all_in_one_list = df_storms_concomit_wind_missing['ts']
     ts_storms_organized = listing_consecutive_time_stamps(ts_storms_all_in_one_list, interval='01:00:00')
     return ts_storms_organized
@@ -140,15 +121,15 @@ def create_storm_data_files(window='00:10:00'):
         t_start = t_list[0].strftime(format='%Y-%m-%d %H:%M:%S.%f')[:-5]
         t_end  = t_list[-1].strftime(format='%Y-%m-%d %H:%M:%S.%f')[:-5]
         process_data_fun(window=window, masts_to_read=['synn', 'osp1', 'osp2', 'svar'], date_from_read=t_start, date_to_read=t_end, raw_data_folder='D:\PhD\Metocean_raw_data',
-                         include_fitted_spectral_quantities=False, check_data_has_same_lens=True, save_json=True, save_as_storm=True, save_as_storm_name='_storm_' + str(i + 1))
+                         include_fitted_spectral_quantities=False, check_data_has_same_lens=True, save_json=True, save_in_folder='processed_storm_data', save_fname_suffix='_storm_' + str(i + 1))
         print(f'Storm data is now processed, from {t_start} to {t_end}')
 
 
 def compile_storm_data_files():
-    compile_all_processed_data_into_1_file(data_str='storm_', save_str='00-10-00_all_storms', save_json=True, save_as_storm=True)
+    compile_all_processed_data_into_1_file(data_str='storm_', save_str='00-10-00_all_storms', save_json=True, foldername='processed_storm_data')
 
 
-def create_all_storms_excel():
+def create_excel_with_all_storms():
     pass
 
 
