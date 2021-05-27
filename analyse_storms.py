@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import json
 from read_0p1sec_data import compile_all_processed_data_into_1_file
-from find_storms import find_storm_timestamps
+from find_storms import find_storm_timestamps, from_V_NWZ_dict_to_V_Lw
 
 ts_storm = find_storm_timestamps()
 
@@ -25,6 +25,8 @@ with open(os.path.join(os.getcwd(), 'processed_data', '00-10-00_all_storms'), "r
         for anem in ['A', 'B', 'C']:
             storm_df = pd.DataFrame()
             storm_df['ts'] = [time for time_list in storm_dict[mast][anem]['ts'] for time in time_list]
+            U_Lw, betas_c = from_V_NWZ_dict_to_V_Lw(V_NWZ_dict=storm_dict[mast][anem]['means'], also_return_betas_c=True)
+
             storm_df[mast+'_'+anem] = [U for U_list in storm_dict[mast][anem]['means'] for U in U_list]
             storm_df_all_means = pd.merge(storm_df_all_means, storm_df, how="outer", on=["ts"])
 

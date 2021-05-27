@@ -197,8 +197,8 @@ def check_max_n_of_consecutive_NaN(df):
     return max([len(list(group)) for group in more_itertools.consecutive_groups(inds)])
 
 
-def save_processed_data(processed_data, fname='data_10min'):
-    with open(os.path.join(os.getcwd(), 'processed_data', fname), "w") as fp:
+def save_processed_data(processed_data, foldername='processed_data', fname='data_10min'):
+    with open(os.path.join(os.getcwd(), foldername, fname), "w") as fp:
         json.dump(processed_data, fp)
 
 
@@ -259,7 +259,7 @@ def fitted_spectral_quantities_to_raw_data():
 
 
 def process_data_fun(window='01:00:00', masts_to_read=['synn', 'osp1', 'osp2', 'svar'], date_from_read='2017-12-21 00:15:00.0', date_to_read='2017-12-21 05:15:00.0',
-                     raw_data_folder='D:\PhD\Metocean_raw_data', include_fitted_spectral_quantities=False, check_data_has_same_lens=True, save_json=False, json_fname_suffix=''):
+                     raw_data_folder='D:\PhD\Metocean_raw_data', include_fitted_spectral_quantities=False, check_data_has_same_lens=True, save_json=False, save_as_storm=False, save_as_storm_name=''):
     """
     :param window: str. Use '01:00:00' for 1h statistics. Use '00:10:00' for 10-min statistics. Other windows are possible as long as they are an integer factor of a 24 h period.
     :param masts_to_read: list. Choose from: 'osp1', 'osp2', 'svar', 'synn'
@@ -269,7 +269,8 @@ def process_data_fun(window='01:00:00', masts_to_read=['synn', 'osp1', 'osp2', '
     :param check_data_has_same_lens:  bool
     :param save_json: bool
     :param raw_data_folder: str. Due to lack of permissions, the O: folder cannot be used directly. An external SDD was used to store the raw data
-    :param json_fname_suffix: string to append to the file name when saving the data if save_json=True
+    :param save_as_storm: string to append to the file name when saving the data if save_json=True
+    :param save_as_storm_name: e.g. '_storm_1' for storm 1
     :return: nested dictionary with all 1-hour mean, std, and timestamp data, at the desired masts and time interval
     """
     data = read_0p1sec_data_fun(masts_to_read=masts_to_read, date_from_read=date_from_read, date_to_read=date_to_read, raw_data_folder=raw_data_folder)
@@ -317,12 +318,16 @@ def process_data_fun(window='01:00:00', masts_to_read=['synn', 'osp1', 'osp2', '
         if not check_processed_data_has_same_len(data_processed):
             print("The 10min/1h data has different size for different masts/anemometers!")
     if save_json:
-        fname = (window + '_stats_' + date_from_read[:-2] + '_' + date_to_read[:-2] + json_fname_suffix).replace(" ", "_").replace(":","-")
-        save_processed_data(data_processed, fname=fname)
+        if save_as_storm:
+            fname = (window + '_stats_' + date_from_read[:-2] + '_' + date_to_read[:-2] + save_as_storm_name).replace(" ", "_").replace(":", "-")
+            save_processed_data(data_processed, foldername='processed_storm_data', fname=fname)
+        else:
+            fname = (window + '_stats_' + date_from_read[:-2] + '_' + date_to_read[:-2]).replace(" ", "_").replace(":", "-")
+            save_processed_data(data_processed, foldername='processed_data', fname=fname)
     return data_processed
 
 
-def create_processed_data_files(date_start=datetime.datetime.strptime('2015-01-01 00:00:00.0', '%Y-%m-%d %H:%M:%S.%f'), n_months=12 * 6, window='01:00:00', json_fname_suffix=''):
+def create_processed_data_files(date_start=datetime.datetime.strptime('2015-01-01 00:00:00.0', '%Y-%m-%d %H:%M:%S.%f'), n_months=12 * 6, window='01:00:00', save_as_storm=False):
     """
     Generates many processed data files, one month long each, given a start date and n_monts.
     Args:
@@ -335,7 +340,7 @@ def create_processed_data_files(date_start=datetime.datetime.strptime('2015-01-0
     for dt1, dt2 in zip(dates_list[:-1], dates_list[1:]):
         dt1_str = dt1.strftime('%Y-%m-%d %H:%M:%S.%f')[:-5]
         dt2_str = dt2.strftime('%Y-%m-%d %H:%M:%S.%f')[:-5]
-        process_data_fun(window=window, masts_to_read=['synn', 'osp1', 'osp2', 'svar'], date_from_read=dt1_str, date_to_read=dt2_str, save_json=True, json_fname_suffix=json_fname_suffix)
+        process_data_fun(window=window, masts_to_read=['synn', 'osp1', 'osp2', 'svar'], date_from_read=dt1_str, date_to_read=dt2_str, save_json=True, save_as_storm=save_as_storm)
         print(f'Data is now processed, from {dt1_str} to {dt2_str}')
 
 
@@ -355,7 +360,7 @@ def create_empty_nested_dictionary():
     return empty_dict
 
 
-def compile_all_processed_data_into_1_file(data_str='01-00-00_stats', save_str='01-00-00_all_stats', save_json=True):
+def compile_all_processed_data_into_1_file(data_str='01-00-00_stats', save_str='01-00-00_all_stats', save_json=True, save_as_storm=False):
     """
     Merging all json files that include data_str in their name, into one single json file
     """
@@ -377,7 +382,10 @@ def compile_all_processed_data_into_1_file(data_str='01-00-00_stats', save_str='
                             for idx, d in enumerate(['to_North', 'to_West', 'to_Zenith']):
                                 pro_file[m][a][x][d] += np.array(f[m][a][x]).T.tolist()[idx]
     if save_json:
-        save_processed_data(processed_data=pro_file, fname=save_str)
+        if save_as_storm:
+            save_processed_data(processed_data=pro_file, foldername='processed_storm_data', fname=save_str)
+        else:
+            save_processed_data(processed_data=pro_file, foldername='processed_data', fname=save_str)
     return pro_file
 
 

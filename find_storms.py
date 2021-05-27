@@ -57,9 +57,11 @@ def strong_wind_events_per_anem(ts, U, U_cond_1=13.9, U_cond_2=17.2):
     return {'ts': strong_wind_ts, 'U': strong_wind_U}
 
 
-def from_V_NWZ_dict_to_V_Lw(V_NWZ_dict):
+def from_V_NWZ_dict_to_V_Lw(V_NWZ_dict, also_return_betas_c=False):
     """
-    e.g. V_NWZ_dict = pro_data[mast][anem]['means']
+    Args:
+        V_NWZ_dict: e.g. pro_data[mast][anem]['means'] or storm_dict[mast][anem]['means']
+        also_return_betas_c: Whether to include betas_c in the return or not
     """
     V_NWZ_N = np.array(V_NWZ_dict['to_North'])
     V_NWZ_W = np.array(V_NWZ_dict['to_West'])
@@ -68,7 +70,10 @@ def from_V_NWZ_dict_to_V_Lw(V_NWZ_dict):
     betas_c = beta_cardinal_given_speed_towards_N_and_W(V_NWZ[0], V_NWZ[1])
     T_uvw_NWZ = np.array([T_uvw_NWZ_fun(b) for b in betas_c])
     V_Lw = np.einsum('tij,jt->it', T_uvw_NWZ, V_NWZ, optimize=True)  # Lw - Local wind coordinate system (U+u, v, w)
-    return V_Lw
+    if also_return_betas_c:
+        return V_Lw, betas_c
+    else:
+        return V_Lw
 
 
 def strong_wind_events_per_anem_all_merged(fname='01-00-00_all_stats'):
@@ -89,8 +94,8 @@ def strong_wind_events_per_anem_all_merged(fname='01-00-00_all_stats'):
         for anem in ['A', 'B', 'C']:
             storm_df = pd.DataFrame()
             ts = pd.to_datetime(pro_data[mast][anem]['ts'])
-            V_Lw = from_V_NWZ_dict_to_V_Lw(V_NWZ_dict=pro_data[mast][anem]['means'])
-            storm_dict_all[mast][anem] = strong_wind_events_per_anem(ts=ts , U=V_Lw[0])
+            U_Lw = from_V_NWZ_dict_to_V_Lw(V_NWZ_dict=pro_data[mast][anem]['means'])
+            storm_dict_all[mast][anem] = strong_wind_events_per_anem(ts=ts , U=U_Lw[0])
             storm_df['ts'] = [time for time_list in storm_dict_all[mast][anem]['ts'] for time in time_list]
             storm_df[mast+'_'+anem] = [U for U_list in storm_dict_all[mast][anem]['U'] for U in U_list]
             # print(f'N storms in {mast}-{anem}: ' + str(len(storm_dict_all[mast][anem]['ts'])))
@@ -135,12 +140,12 @@ def create_storm_data_files(window='00:10:00'):
         t_start = t_list[0].strftime(format='%Y-%m-%d %H:%M:%S.%f')[:-5]
         t_end  = t_list[-1].strftime(format='%Y-%m-%d %H:%M:%S.%f')[:-5]
         process_data_fun(window=window, masts_to_read=['synn', 'osp1', 'osp2', 'svar'], date_from_read=t_start, date_to_read=t_end, raw_data_folder='D:\PhD\Metocean_raw_data',
-                         include_fitted_spectral_quantities=False, check_data_has_same_lens=True, save_json=True, json_fname_suffix='_storm_' + str(i + 1))
+                         include_fitted_spectral_quantities=False, check_data_has_same_lens=True, save_json=True, save_as_storm=True, save_as_storm_name='_storm_' + str(i + 1))
         print(f'Storm data is now processed, from {t_start} to {t_end}')
 
 
 def compile_storm_data_files():
-    compile_all_processed_data_into_1_file(data_str='storm_', save_str='00-10-00_all_storms', save_json=True)
+    compile_all_processed_data_into_1_file(data_str='storm_', save_str='00-10-00_all_storms', save_json=True, save_as_storm=True)
 
 
 def create_all_storms_excel():
@@ -157,8 +162,8 @@ def plot_storm_ws_per_anem(dict_storms_concomit_wind_missing):
                 plt.plot(ts, U, alpha=0.9, lw=0.2, color='blue')
                 plt.axvspan(xmin=ts[0], xmax=ts[-1], color='orange')
                 # print(np.max(U), ts[0], ts[-1])
-            # plt.plot(pd.to_datetime(pro_data['osp1']['A']['ts']), V_Lw[1], label='v')
-            # plt.plot(pd.to_datetime(pro_data['osp1']['A']['ts']), V_Lw[2], label='w')
+            # plt.plot(pd.to_datetime(pro_data['osp1']['A']['ts']), U_Lw[1], label='v')
+            # plt.plot(pd.to_datetime(pro_data['osp1']['A']['ts']), U_Lw[2], label='w')
             plt.xlim(pd.DatetimeIndex(['2015-02-01 00:00:00', '2020-05-01 00:00:00']))
             plt.show()
 
