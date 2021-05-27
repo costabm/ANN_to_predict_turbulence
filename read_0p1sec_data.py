@@ -253,13 +253,19 @@ def check_processed_data_has_same_len(data_processed):
         return False
 
 
+def fitted_spectral_quantities_to_raw_data():
+    # To be implemented
+    pass
+
+
 def process_data_fun(window='01:00:00', masts_to_read=['synn', 'osp1', 'osp2', 'svar'], date_from_read='2017-12-21 00:15:00.0', date_to_read='2017-12-21 05:15:00.0',
-                     raw_data_folder='D:\PhD\Metocean_raw_data', check_data_has_same_lens=True, save_json=False, json_fname_suffix=''):
+                     raw_data_folder='D:\PhD\Metocean_raw_data', include_fitted_spectral_quantities=False, check_data_has_same_lens=True, save_json=False, json_fname_suffix=''):
     """
     :param window: str. Use '01:00:00' for 1h statistics. Use '00:10:00' for 10-min statistics. Other windows are possible as long as they are an integer factor of a 24 h period.
     :param masts_to_read: list. Choose from: 'osp1', 'osp2', 'svar', 'synn'
     :param date_from_read: str. date/time to read from
     :param date_to_read: str. date/time to read to
+    :param include_fitted_spectral_quantities: bool
     :param check_data_has_same_lens:  bool
     :param save_json: bool
     :param raw_data_folder: str. Due to lack of permissions, the O: folder cannot be used directly. An external SDD was used to store the raw data
@@ -302,6 +308,9 @@ def process_data_fun(window='01:00:00', masts_to_read=['synn', 'osp1', 'osp2', '
                     means.append(np.nanmean(V_NWZ_chunk, axis=1, dtype='float32').tolist())
                     stds.append( np.nanstd( V_NWZ_chunk, axis=1, dtype='float32').tolist())
                     availability.append(np.array(1 - np.count_nonzero(np.isnan(V_NWZ_chunk), axis=1)/np.shape(V_NWZ_chunk)[-1], dtype='float32').tolist())
+                    if include_fitted_spectral_quantities:
+                        fitted_spectral_quantities_to_raw_data()
+                        raise NotImplementedError
                     # description = 'The 3 axes in means, stds and availability are in the NWZ (North-West-Zenith) coordinate system. N means TOWARDS North'
             data_processed[mast][anem] = {'ts':timestamps, 'means':means, 'stds':stds, 'availability':availability}  #, 'missedstamps':missed_timestamps, 'description':description}
     if check_data_has_same_lens:
@@ -346,14 +355,14 @@ def create_empty_nested_dictionary():
     return empty_dict
 
 
-def compile_all_processed_data_into_1_file(stats_str='01-00-00', save_json=True):
+def compile_all_processed_data_into_1_file(data_str='01-00-00_stats', save_str='01-00-00_all_stats', save_json=True):
     """
-    Merging all json files that include stats_str in their name, into one single json file
+    Merging all json files that include data_str in their name, into one single json file
     """
     all_fnames = os.listdir(os.path.join(os.getcwd(), 'processed_data'))
     all_1h_files = []
     for f in all_fnames:
-        if stats_str + '_stats' in f:
+        if data_str in f:
             with open(os.path.join(os.getcwd(), 'processed_data', f), "r") as json_file:
                 all_1h_files.append(json.load(json_file))
     pro_file = create_empty_nested_dictionary()
@@ -368,7 +377,7 @@ def compile_all_processed_data_into_1_file(stats_str='01-00-00', save_json=True)
                             for idx, d in enumerate(['to_North', 'to_West', 'to_Zenith']):
                                 pro_file[m][a][x][d] += np.array(f[m][a][x]).T.tolist()[idx]
     if save_json:
-        save_processed_data(pro_file, stats_str+'_all_stats')
+        save_processed_data(processed_data=pro_file, fname=save_str)
     return pro_file
 
 
