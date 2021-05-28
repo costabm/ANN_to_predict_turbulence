@@ -12,7 +12,7 @@ To process the 10 Hz data into e.g. 1h or 10min data (window='01:00:00' or windo
 create_processed_data_files(date_start=datetime.datetime.strptime('2015-01-01 00:00:00.0', '%Y-%m-%d %H:%M:%S.%f'), n_months=12*6, window='01:00:00')
 -----------------------------------------------------------------------------------------
 After having all the json files of the processed data, to compile them all into one file, run e.g.:
-compile_all_processed_data_into_1_file(stats_str='01-00-00', save_json=True)
+compile_all_processed_data_into_1_file(data_str='01-00-00_stats', save_str='01-00-00_all_stats', save_json=True, foldername='processed_data')
 """
 
 import numpy as np
@@ -64,7 +64,7 @@ def remove_outliers_using_zscore(df, window_to_test_zscore=100, min_periods=30, 
     return df_new
 
 
-def read_0p1sec_data_fun(masts_to_read=['synn','osp1','osp2','svar'], date_from_read='2017-12-21 00:15:00.0', date_to_read='2017-12-21 05:15:00.0', raw_data_folder='D:\PhD\Metocean_raw_data',
+def read_0p1sec_data_fun(masts_to_read=['synn','osp1','osp2','svar'], date_from_read='2017-12-21 00:00:00.0', date_to_read='2017-12-21 05:00:00.0', raw_data_folder='D:\PhD\Metocean_raw_data',
                          remove_outliers=True):
     """
     :param masts_to_read: Choose from: 'osp1', 'osp2', 'svar', 'synn'
@@ -100,6 +100,8 @@ def read_0p1sec_data_fun(masts_to_read=['synn','osp1','osp2','svar'], date_from_
                                      dtype={'TIMESTAMP':str, 'Sonic_A_U_Axis_Velocity': np.float32, 'Sonic_A_V_Axis_Velocity': np.float32, 'Sonic_A_W_Axis_Velocity': np.float32,
                                                              'Sonic_B_U_Axis_Velocity': np.float32, 'Sonic_B_V_Axis_Velocity': np.float32, 'Sonic_B_W_Axis_Velocity': np.float32,
                                                              'Sonic_C_U_Axis_Velocity': np.float32, 'Sonic_C_V_Axis_Velocity': np.float32, 'Sonic_C_W_Axis_Velocity': np.float32})
+                    # date_from_read_omit_p0 = date_from_read[:-2] if date_from_read[-2:] == '.0' else date_from_read
+                    # date_to_read_omit_p0   =   date_to_read[:-2] if   date_to_read[-2:] == '.0' else   date_to_read
                     df = df[(df['TIMESTAMP'] >= date_from_read) & (df['TIMESTAMP'] <= date_to_read)]  # droping all rows outside requested datetime interval
                     if remove_outliers:
                         df = remove_outliers_using_zscore(df, warn_non_normal_data=True, warn_path=file_path)
@@ -277,7 +279,7 @@ def fitted_spectral_quantities_to_raw_data():
     pass
 
 
-def process_data_fun(window='01:00:00', masts_to_read=['synn', 'osp1', 'osp2', 'svar'], date_from_read='2017-12-21 00:15:00.0', date_to_read='2017-12-21 05:15:00.0',
+def process_data_fun(window='01:00:00', masts_to_read=['synn', 'osp1', 'osp2', 'svar'], date_from_read='2017-12-21 00:00:00.0', date_to_read='2017-12-21 05:00:00.0',
                      raw_data_folder='D:\PhD\Metocean_raw_data', include_fitted_spectral_quantities=False, check_data_has_same_lens=True, save_json=False, save_in_folder='processed_data',
                      save_fname_suffix=''):
     """
@@ -302,35 +304,28 @@ def process_data_fun(window='01:00:00', masts_to_read=['synn', 'osp1', 'osp2', '
             ts = data[mast]['TIMESTAMP']
             dt1 = datetime.datetime.strptime(date_from_read, '%Y-%m-%d %H:%M:%S.%f')
             dt2 = datetime.datetime.strptime(date_to_read,   '%Y-%m-%d %H:%M:%S.%f')
-            all_timestamps = get_list_of_precise_datetimes_between_2_dts(dt1, dt2, precision=window)
-            all_precise_timestamps_str = [all_timestamps[i].strftime('%Y-%m-%d %H:%M:%S') for i in range(len(all_timestamps))]
+            all_precise_timestamps = get_list_of_precise_datetimes_between_2_dts(dt1, dt2, precision=window)
+            all_precise_timestamps_str = [all_precise_timestamps[i].strftime('%Y-%m-%d %H:%M:%S') for i in range(len(all_precise_timestamps))]
+            ts_init = date_from_read[:-2] if date_from_read[-2:] == '.0' else date_from_read  # e.g. ts starts at 06:00:00.1, but we will need the initial stamp 06:00:00 for the first prev_time_idx+1
             # The next line is MUCH FASTER than np.where(np.isin(ts,all_precise_timestamps_str))[0]:
-            measured_precise_timestamps, measured_precise_time_idxs, set_of_all_found_values = np.intersect1d(ts, all_precise_timestamps_str, assume_unique=True, return_indices=True)
-            # missed_timestamps = [i for i in all_precise_timestamps_str if i not in measured_precise_timestamps]
+            measured_precise_timestamps, measured_precise_time_idxs, set_of_all_found_values = np.intersect1d(pd.Series(ts_init).append(ts), all_precise_timestamps_str,
+                                                                                                              assume_unique=True, return_indices=True)
             # Converting wind raw data in arbitrary axes to Lw - Local Wind axes
             U_Gill = data[mast][f'Sonic_{anem}_U_Axis_Velocity'].values
             V_Gill = data[mast][f'Sonic_{anem}_V_Axis_Velocity'].values
             W_Gill = data[mast][f'Sonic_{anem}_W_Axis_Velocity'].values
             V_KVT = np.array([U_Gill, V_Gill, W_Gill])
             V_NWZ = T_NWZ_Gill_fun(mast, anem) @ V_KVT  # North-West-Zenith coordinate system
-            # KEEP THIS CODE: (can be useful if implementing
-            # beta_c = beta_cardinal_given_speed_towards_N_and_W(V_NWZ[0], V_NWZ[1])
-            # mean_beta_c = np.nanmean(beta_c)
-            # V_Lw = T_uvw_NWZ_fun(mean_beta_c) @ V_NWZ  # Lw - Local wind coordinate system (U+u, v, w)
-            # Performing the 1-hour or 10-min averages
             timestamps = []
             means = []
             cov = []
             availability = []
             for prev_time_idx, time_idx in zip(measured_precise_time_idxs[:-1], measured_precise_time_idxs[1:]):
                 assert prev_time_idx < time_idx, "Somehow there are still duplicate rows?"
-                V_NWZ_chunk = V_NWZ[:, prev_time_idx:time_idx]
+                V_NWZ_chunk = V_NWZ[:, prev_time_idx+1:time_idx+1]  # note that time_idx should be included in the calc, but not prev_time_idx
                 if not np.isnan(V_NWZ_chunk).all():  # if there is at least some data
                     V_NWZ_chunk_df = pd.DataFrame({'to_North': V_NWZ_chunk[0], 'to_West': V_NWZ_chunk[1], 'to_Zenith': V_NWZ_chunk[2]})
                     timestamps.append(ts.iloc[time_idx])
-                    # means.append(np.nanmean(V_NWZ_chunk, axis=1, dtype='float32').tolist())  # OLD VERSION
-                    # availability.append(np.array(1 - np.count_nonzero(np.isnan(V_NWZ_chunk), axis=1)/np.shape(V_NWZ_chunk)[-1], dtype='float32').tolist())  # OLD VERSION
-                    # description = 'The 3 axes in means, stds and availability are in the NWZ (North-West-Zenith) coordinate system. N means TOWARDS North'
                     means.append(V_NWZ_chunk_df.mean().to_numpy(dtype='float32').tolist()) # To calculate the covariance matrix with nan values in the mix, pd.cov is necessary.
                     cov.append(V_NWZ_chunk_df.cov().to_numpy(dtype='float32').tolist())
                     availability.append((1-V_NWZ_chunk_df.isna().mean()).to_numpy(dtype='float32').tolist())
@@ -370,8 +365,8 @@ def create_empty_nested_dictionary():
         empty_dict[m] = {}
         for a in ['A', 'B', 'C']:
             empty_dict[m][a] = {}
-            for x in ['ts', 'means', 'covars', 'availability']:
-                if x == 'ts' or x== 'covars':
+            for x in ['ts', 'means', 'covar', 'availability']:
+                if x == 'ts' or x== 'covar':
                     empty_dict[m][a][x] = []
                 else:
                     empty_dict[m][a][x] = {}
@@ -384,19 +379,19 @@ def compile_all_processed_data_into_1_file(data_str='01-00-00_stats', save_str='
     """
     Merging all json files that include data_str in their name, into one single json file
     """
-    all_fnames = os.listdir(os.path.join(os.getcwd(), 'processed_data'))
+    all_fnames = os.listdir(os.path.join(os.getcwd(), foldername))
     all_1h_files = []
     for f in all_fnames:
         if data_str in f:
-            with open(os.path.join(os.getcwd(), 'processed_data', f), "r") as json_file:
+            with open(os.path.join(os.getcwd(), foldername, f), "r") as json_file:
                 all_1h_files.append(json.load(json_file))
     pro_file = create_empty_nested_dictionary()
     for f in all_1h_files:
         for m in ['osp1', 'osp2', 'svar', 'synn']:
             for a in ['A','B','C']:
-                for x in ['ts', 'means', 'covars', 'availability']:
+                for x in ['ts', 'means', 'covar', 'availability']:
                     if f[m][a][x]:  # if there is data
-                        if x == 'ts' or x== 'covars':
+                        if x == 'ts' or x== 'covar':
                             pro_file[m][a][x] += f[m][a][x]
                         else:
                             for idx, d in enumerate(['to_North', 'to_West', 'to_Zenith']):
@@ -404,9 +399,5 @@ def compile_all_processed_data_into_1_file(data_str='01-00-00_stats', save_str='
     if save_json:
         save_processed_data(processed_data=pro_file, foldername=foldername, fname=save_str)
     return pro_file
-
-
-create_processed_data_files(date_start=datetime.datetime.strptime('2015-01-01 00:00:00.0', '%Y-%m-%d %H:%M:%S.%f'), n_months=12*6, window='01:00:00')
-
 
 

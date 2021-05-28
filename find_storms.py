@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import json
-from read_0p1sec_data import process_data_fun, compile_all_processed_data_into_1_file, from_V_NWZ_dict_to_V_Lw
+from read_0p1sec_data import process_data_fun, compile_all_processed_data_into_1_file, from_V_NWZ_dict_to_V_Lw, T_uvw_NWZ_fun
 from operator import itemgetter
 from itertools import groupby
 
@@ -129,11 +129,62 @@ def compile_storm_data_files():
     compile_all_processed_data_into_1_file(data_str='storm_', save_str='00-10-00_all_storms', save_json=True, foldername='processed_storm_data')
 
 
-def create_excel_with_all_storms():
-    pass
+def organized_dataframes_of_storms(foldername='processed_storm_data', compiled_fname='00-10-00_all_storms'):
+    """
+    Returns: Nicely organized dataframes: one for mean wind speeds, one for directions, one for each turbulence intensity, one for the data availability
+    """
+    with open(os.path.join(os.getcwd(), foldername, compiled_fname), "r") as json_file:
+        storm_dict = json.load(json_file)
+    storm_df_all_means = pd.DataFrame(columns=['ts'])
+    storm_df_all_dirs = pd.DataFrame(columns=['ts'])
+    storm_df_all_Iu = pd.DataFrame(columns=['ts'])  # turbulence intensities
+    storm_df_all_Iv = pd.DataFrame(columns=['ts'])  # turbulence intensities
+    storm_df_all_Iw = pd.DataFrame(columns=['ts'])  # turbulence intensities
+    storm_df_all_avail = pd.DataFrame(columns=['ts'])
+    for mast in ['osp1', 'osp2', 'svar', 'synn']:
+        for anem in ['A', 'B', 'C']:
+            # Means
+            storm_df_means = pd.DataFrame()
+            storm_df_means['ts'] = [time for time in storm_dict[mast][anem]['ts']]
+            U_Lw, betas_c = from_V_NWZ_dict_to_V_Lw(V_NWZ_dict=storm_dict[mast][anem]['means'], also_return_betas_c=True)
+            storm_df_means[mast + '_' + anem] = U_Lw[0]
+            storm_df_all_means = pd.merge(storm_df_all_means, storm_df_means, how="outer", on=["ts"], sort=True)
+            # Dirs
+            storm_df_dirs = pd.DataFrame()
+            storm_df_dirs['ts'] = storm_df_means['ts']
+            storm_df_dirs[mast + '_' + anem] = np.rad2deg(betas_c)
+            storm_df_all_dirs = pd.merge(storm_df_all_dirs, storm_df_dirs, how="outer", on=["ts"], sort=True)
+            # Turbulence intensities, obtained from the covariance matrices
+            storm_df_Iu = pd.DataFrame()
+            storm_df_Iv = pd.DataFrame()
+            storm_df_Iw = pd.DataFrame()
+            storm_df_Iu['ts'] = storm_df_means['ts']
+            storm_df_Iv['ts'] = storm_df_means['ts']
+            storm_df_Iw['ts'] = storm_df_means['ts']
+            T_uvw_NWZ = np.array([T_uvw_NWZ_fun(b) for b in betas_c])
+            stds = np.array([np.sqrt(np.diag(T_uvw_NWZ[i] @ np.array(matrix) @ T_uvw_NWZ[i].T)) for i, matrix in enumerate(storm_dict[mast][anem]['covar'])])
+            storm_df_Iu[mast + '_' + anem + '_' + 'SD(U)'] = stds[:, 0] / U_Lw[0]
+            storm_df_Iv[mast + '_' + anem + '_' + 'SD(V)'] = stds[:, 1] / U_Lw[0]
+            storm_df_Iw[mast + '_' + anem + '_' + 'SD(W)'] = stds[:, 2] / U_Lw[0]
+            storm_df_all_Iu = pd.merge(storm_df_all_Iu, storm_df_Iu, how="outer", on=["ts"], sort=True)
+            storm_df_all_Iv = pd.merge(storm_df_all_Iv, storm_df_Iv, how="outer", on=["ts"], sort=True)
+            storm_df_all_Iw = pd.merge(storm_df_all_Iw, storm_df_Iw, how="outer", on=["ts"], sort=True)
+            # Availabilities
+            storm_df_avail = pd.DataFrame()
+            storm_df_avail['ts'] = [time for time in storm_dict[mast][anem]['ts']]
+            storm_df_avail[mast + '_' + anem] = pd.DataFrame(storm_dict[mast][anem]['availability']).min(axis=1)  # minimum availability between 'to_North', 'to_West' & 'to_Zenith'
+            storm_df_all_avail = pd.merge(storm_df_all_avail, storm_df_avail, how="outer", on=["ts"], sort=True)
+    del storm_df_means, storm_df_dirs, storm_df_Iu, storm_df_Iv, storm_df_Iw, storm_df_avail
+
+
+
+    return storm_df_all_means, storm_df_all_dirs, storm_df_all_Iu, storm_df_all_Iv, storm_df_all_Iw, storm_df_all_avail
 
 
 def plot_storm_ws_per_anem(dict_storms_concomit_wind_missing):
+    """
+    Not so nice plots... Just to see where in time storms occur
+    """
     for mast in ['osp1', 'osp2', 'svar', 'synn']:
         for anem in ['A', 'B', 'C']:
             ts_storms = dict_storms_concomit_wind_missing[mast][anem]['ts']
@@ -149,19 +200,5 @@ def plot_storm_ws_per_anem(dict_storms_concomit_wind_missing):
             plt.show()
 
 
-
-# TRASH
-# FINDING PROBLEM WITH SYNNØYTANGEN WIND SPEEDS (TOO HIGH!!)
-# from read_0p1sec_data import read_0p1sec_data_fun
-# synn_data = read_0p1sec_data_fun(masts_to_read=['synn'], date_from_read='2019-03-27 01:20:00', date_to_read='2019-03-27 01:30:00', raw_data_folder='D:\PhD\Metocean_raw_data')
-# svar_data = read_0p1sec_data_fun(masts_to_read=['svar'], date_from_read='2015-05-26 11:00:00', date_to_read='2015-05-26 12:00:00', raw_data_folder='D:\PhD\Metocean_raw_data')
-# # Time period full of bad data that is hard to find!
-# synn_data = read_0p1sec_data_fun(masts_to_read=['synn'], date_from_read='2019-01-03 12:19:30', date_to_read='2019-01-03 12:20:30', raw_data_folder='D:\PhD\Metocean_raw_data')
-# # synn_data['synn'][synn_data['synn']['Sonic_A_U_Axis_Velocity'] > 2]
-# synn_data['synn']['Sonic_A_U_Axis_Velocity'].isna().sum()
-# test_rolling_mean = synn_data['synn'].drop('TIMESTAMP', axis=1).rolling(window=50, min_periods=10, center=True, closed='right').mean()
-# test_rolling_std  = synn_data['synn'].drop('TIMESTAMP', axis=1).rolling(window=50, min_periods=10, center=True, closed='right').std()
-# test_rolling_zscore = (synn_data['synn'].drop('TIMESTAMP', axis=1) - test_rolling_mean) / test_rolling_std
-
-
+create_storm_data_files(window='00:10:00')
 
