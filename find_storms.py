@@ -105,20 +105,21 @@ def listing_consecutive_time_stamps(list_of_timestamps, interval='01:00:00'):
     return big_list
 
 
-def find_storm_timestamps():
-    df_storms_concomit_wind_missing, dict_storms_concomit_wind_missing = strong_wind_events_per_anem_all_merged(input_fname='01-00-00_all_stats')
+def find_storm_timestamps(input_fname='01-00-00_all_stats'):
+    df_storms_concomit_wind_missing, dict_storms_concomit_wind_missing = strong_wind_events_per_anem_all_merged(input_fname=input_fname)
     ts_storms_all_in_one_list = df_storms_concomit_wind_missing['ts']
-    ts_storms_organized = listing_consecutive_time_stamps(ts_storms_all_in_one_list, interval='01:00:00')
+    ts_storms_organized = listing_consecutive_time_stamps(ts_storms_all_in_one_list, interval=input_fname[:8].replace('-',':'))
     return ts_storms_organized
 
 
-def create_storm_data_files(window='00:10:00'):
+def create_storm_data_files(window='00:10:00', input_fname='01-00-00_all_stats'):
     """
     This ensures that we also create wind data that does not necessarily qualify as strong wind, but that it occurs at the same time as (concomitant to) strong winds elsewhere.
     """
-    ts_storms = find_storm_timestamps()
+    ts_storms = find_storm_timestamps(input_fname=input_fname)
+    input_interval = pd.Timedelta(input_fname[:8].replace('-', ':'))
     for i, t_list in enumerate(ts_storms):
-        t_start = t_list[0].strftime(format='%Y-%m-%d %H:%M:%S.%f')[:-5]
+        t_start = (t_list[0]-input_interval).strftime(format='%Y-%m-%d %H:%M:%S.%f')[:-5]  # If storm starts at e.g. 06:00:00 (found w/ 1h intervals) then the 10min storm file starts at 05:10:00
         t_end  = t_list[-1].strftime(format='%Y-%m-%d %H:%M:%S.%f')[:-5]
         process_data_fun(window=window, masts_to_read=['synn', 'osp1', 'osp2', 'svar'], date_from_read=t_start, date_to_read=t_end, raw_data_folder='D:\PhD\Metocean_raw_data',
                          include_fitted_spectral_quantities=False, check_data_has_same_lens=True, save_json=True, save_in_folder='processed_storm_data', save_fname_suffix='_storm_' + str(i + 1))
@@ -163,9 +164,9 @@ def organized_dataframes_of_storms(foldername='processed_storm_data', compiled_f
             storm_df_Iw['ts'] = storm_df_means['ts']
             T_uvw_NWZ = np.array([T_uvw_NWZ_fun(b) for b in betas_c])
             stds = np.array([np.sqrt(np.diag(T_uvw_NWZ[i] @ np.array(matrix) @ T_uvw_NWZ[i].T)) for i, matrix in enumerate(storm_dict[mast][anem]['covar'])])
-            storm_df_Iu[mast + '_' + anem + '_' + 'SD(U)'] = stds[:, 0] / U_Lw[0]
-            storm_df_Iv[mast + '_' + anem + '_' + 'SD(V)'] = stds[:, 1] / U_Lw[0]
-            storm_df_Iw[mast + '_' + anem + '_' + 'SD(W)'] = stds[:, 2] / U_Lw[0]
+            storm_df_Iu[mast + '_' + anem] = stds[:, 0] / U_Lw[0]
+            storm_df_Iv[mast + '_' + anem] = stds[:, 1] / U_Lw[0]
+            storm_df_Iw[mast + '_' + anem] = stds[:, 2] / U_Lw[0]
             storm_df_all_Iu = pd.merge(storm_df_all_Iu, storm_df_Iu, how="outer", on=["ts"], sort=True)
             storm_df_all_Iv = pd.merge(storm_df_all_Iv, storm_df_Iv, how="outer", on=["ts"], sort=True)
             storm_df_all_Iw = pd.merge(storm_df_all_Iw, storm_df_Iw, how="outer", on=["ts"], sort=True)
@@ -199,6 +200,4 @@ def plot_storm_ws_per_anem(dict_storms_concomit_wind_missing):
             plt.xlim(pd.DatetimeIndex(['2015-02-01 00:00:00', '2020-05-01 00:00:00']))
             plt.show()
 
-
-create_storm_data_files(window='00:10:00')
 

@@ -9,7 +9,7 @@ read_0p1sec_data_fun(masts_to_read=['synn','osp1','osp2','svar'], date_from_read
 -----------------------------------------------------------------------------------------
 To process the 10 Hz data into e.g. 1h or 10min data (window='01:00:00' or window='00:10:00', respectively), storing it as json files (one file per month), in the consistent coordinate system
 "to_North", "to_West", "to_Zenith", run e.g.:
-create_processed_data_files(date_start=datetime.datetime.strptime('2015-01-01 00:00:00.0', '%Y-%m-%d %H:%M:%S.%f'), n_months=12*6, window='01:00:00')
+create_processed_data_files(date_start=datetime.datetime.strptime('2015-01-01 00:00:00.0', '%Y-%m-%d %H:%M:%S.%f'), n_months=12*6, window='01:00:00', save_in_folder='processed_data')
 -----------------------------------------------------------------------------------------
 After having all the json files of the processed data, to compile them all into one file, run e.g.:
 compile_all_processed_data_into_1_file(data_str='01-00-00_stats', save_str='01-00-00_all_stats', save_json=True, foldername='processed_data')
@@ -306,10 +306,10 @@ def process_data_fun(window='01:00:00', masts_to_read=['synn', 'osp1', 'osp2', '
             dt2 = datetime.datetime.strptime(date_to_read,   '%Y-%m-%d %H:%M:%S.%f')
             all_precise_timestamps = get_list_of_precise_datetimes_between_2_dts(dt1, dt2, precision=window)
             all_precise_timestamps_str = [all_precise_timestamps[i].strftime('%Y-%m-%d %H:%M:%S') for i in range(len(all_precise_timestamps))]
-            ts_init = date_from_read[:-2] if date_from_read[-2:] == '.0' else date_from_read  # e.g. ts starts at 06:00:00.1, but we will need the initial stamp 06:00:00 for the first prev_time_idx+1
-            # The next line is MUCH FASTER than np.where(np.isin(ts,all_precise_timestamps_str))[0]:
-            measured_precise_timestamps, measured_precise_time_idxs, set_of_all_found_values = np.intersect1d(pd.Series(ts_init).append(ts), all_precise_timestamps_str,
-                                                                                                              assume_unique=True, return_indices=True)
+            # The next line is MUCH FASTER than using np.where(np.isin(ts_with_start,all_precise_timestamps_str))[0]:
+            _measured_precise_timestamps, measured_precise_time_idxs, _ = np.intersect1d(ts, all_precise_timestamps_str, assume_unique=True, return_indices=True)
+            # Because we need all the data from idx=0 up to the first measured_precise_time_idx, we add 0 to this list (actually we use -1 instead of 0 because prev_time_idx+1 will be used)
+            measured_precise_time_idxs_with_start = [-1] + measured_precise_time_idxs.tolist()  #
             # Converting wind raw data in arbitrary axes to Lw - Local Wind axes
             U_Gill = data[mast][f'Sonic_{anem}_U_Axis_Velocity'].values
             V_Gill = data[mast][f'Sonic_{anem}_V_Axis_Velocity'].values
@@ -320,8 +320,8 @@ def process_data_fun(window='01:00:00', masts_to_read=['synn', 'osp1', 'osp2', '
             means = []
             cov = []
             availability = []
-            for prev_time_idx, time_idx in zip(measured_precise_time_idxs[:-1], measured_precise_time_idxs[1:]):
-                assert prev_time_idx < time_idx, "Somehow there are still duplicate rows?"
+            for prev_time_idx, time_idx in zip(measured_precise_time_idxs_with_start[:-1], measured_precise_time_idxs_with_start[1:]):
+                assert prev_time_idx <= time_idx, "Somehow there are still duplicate rows?"
                 V_NWZ_chunk = V_NWZ[:, prev_time_idx+1:time_idx+1]  # note that time_idx should be included in the calc, but not prev_time_idx
                 if not np.isnan(V_NWZ_chunk).all():  # if there is at least some data
                     V_NWZ_chunk_df = pd.DataFrame({'to_North': V_NWZ_chunk[0], 'to_West': V_NWZ_chunk[1], 'to_Zenith': V_NWZ_chunk[2]})
