@@ -126,7 +126,7 @@ def create_storm_data_files(window='00:10:00', input_fname='01-00-00_all_stats')
         print(f'Storm data is now processed, from {t_start} to {t_end}')
 
 
-def compile_storm_data_files():
+def compile_storm_data_files(save_str='00-10-00_all_storms'):
     compile_all_processed_data_into_1_file(data_str='storm_', save_str='00-10-00_all_storms', save_json=True, foldername='processed_storm_data')
 
 
@@ -176,9 +176,6 @@ def organized_dataframes_of_storms(foldername='processed_storm_data', compiled_f
             storm_df_avail[mast + '_' + anem] = pd.DataFrame(storm_dict[mast][anem]['availability']).min(axis=1)  # minimum availability between 'to_North', 'to_West' & 'to_Zenith'
             storm_df_all_avail = pd.merge(storm_df_all_avail, storm_df_avail, how="outer", on=["ts"], sort=True)
     del storm_df_means, storm_df_dirs, storm_df_Iu, storm_df_Iv, storm_df_Iw, storm_df_avail
-
-
-
     return storm_df_all_means, storm_df_all_dirs, storm_df_all_Iu, storm_df_all_Iv, storm_df_all_Iw, storm_df_all_avail
 
 

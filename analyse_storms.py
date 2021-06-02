@@ -22,7 +22,6 @@ df_to_analyse = df_to_analyse.dropna()
 plt.hist2d(df_to_analyse['dirs'], df_to_analyse['mean'], bins=100)
 plt.show()
 
-
 df_to_analyse = pd.DataFrame()
 df_to_analyse['dirs'] = storm_df_all_dirs['synn_A']
 df_to_analyse['Iu'] = storm_df_all_Iu['synn_A']
