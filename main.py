@@ -39,3 +39,41 @@ for dir_min, dir_max in zip(dir_separators[:-1], dir_separators[1:]):
 
 
 
+
+# Checking variability in the std_u, for different U and different dir
+U_min = 13
+U_max = 14
+delta_dir = 20
+dir_separators = np.arange(0, 360.001, delta_dir)
+mast_list = ['synn', 'osp1', 'osp2', 'svar']
+anem_list = ['A', 'B', 'C']
+for mast in mast_list:
+    plt.figure(figsize=(3.7, 3.7), dpi=800)
+    ax = plt.subplot(111, projection='polar')
+    ax.set_title(mast)
+    ax.set_theta_zero_location("N")
+    ax.set_theta_direction(-1)
+    for anem in anem_list:
+        mast_anem = mast + '_' + anem
+        dir_centre = []
+        Iu_mean = []
+        Iu_std = []
+        u_std_mean = []
+        u_std_std = []
+        for dir_min, dir_max in zip(dir_separators[:-1], dir_separators[1:]):
+            dir_centre.append((dir_max + dir_min)/2)
+            idxs_where_cond = (dir_min <= storm_df_all_dirs[mast_anem]) & (storm_df_all_dirs[mast_anem] <= dir_max) & (U_min <= storm_df_all_means[mast_anem]) & (storm_df_all_means[mast_anem] <= U_max)
+            Iu_mean.append(storm_df_all_Iu[mast_anem][idxs_where_cond].mean())
+            Iu_std.append(storm_df_all_Iu[mast_anem][idxs_where_cond].std())
+            u_std = (storm_df_all_Iu[mast_anem][idxs_where_cond]).multiply(storm_df_all_means[mast_anem][idxs_where_cond])
+            u_std_mean.append(u_std.mean())
+            u_std_std.append(u_std.std())
+        # ax.errorbar(np.deg2rad(dir_centre), Iu_mean, yerr=Iu_std)
+        ax.errorbar(np.deg2rad(dir_centre), u_std_mean, yerr=u_std_std)
+    plt.show()
+
+
+
+
+
+
