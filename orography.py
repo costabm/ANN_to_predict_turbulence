@@ -14,13 +14,21 @@ Converting from UTM zone 33 to Lat Lon:
 Option 1 (preferred): https://www.engineeringtoolbox.com/utm-latitude-longitude-d_1370.html
 Option 2 (gives slighty different results, inaccurate!?): https://stackoverflow.com/questions/343865/how-to-convert-from-utm-to-latlng-in-python-or-javascript
 
+A direct elevation profile script can be found below, but it is slow and it doesn't work in the Bjornafjord coordinates tested:
+https://www.geodose.com/2018/03/create-elevation-profile-generator-python.html
+
+To plot the final result (a full picture from all individual geotiff files), run:
+import matplotlib.pyplot as plt
+lon_mosaic, lat_mosaic, imgs_mosaic = get_all_geotiffs_merged(fnames=fnames, fpositions=fpositions)
+plt.figure(dpi=800)
+plt.imshow(lat_mosaic)
+plt.show()
 """
 
 import numpy as np
 from tifffile import tifffile
 import os
-import matplotlib.pyplot as plt
-import math
+
 
 # Manually introduce the names of the 4 tif files representing the dtm10 maps of Bjornafjord
 fnames = ['dtm10_67m1_3_10m_z33.tif', 'dtm10_67m1_2_10m_z33.tif', 'dtm10_66m1_4_10m_z33.tif', 'dtm10_66m1_1_10m_z33.tif']  # top-left, top-right, bottom-left, bottom-right
@@ -45,9 +53,9 @@ def get_1_geotiff(tifpath, tfwpath, trim=True):
     return img_lons, img_lats, img
 
 
-def get_all_geotiffs_merged(fnames, fpositions, fpath=os.path.join(os.getcwd(), 'basis', 'dtm10', 'data')):
+def get_all_geotiffs_merged(fnames=fnames, fpositions=fpositions, fpath=os.path.join(os.getcwd(), 'basis', 'dtm10', 'data')):
     """
-    Returns the matrix of longitudes, latitudes and heights, from all merged geotiff files, merged into one single matrix
+    Returns the matrix of longitudes, latitudes and heights, from all merged geotiff files (each one as a tile, with row and column number, to be merged into a mosaic)
     """
     positions = np.array([(int(rc[0]), int(rc[1])) for rc in fpositions])  # converting from strings to array
     n_cols = max(positions[:,1])
@@ -74,23 +82,5 @@ def get_all_geotiffs_merged(fnames, fpositions, fpath=os.path.join(os.getcwd(), 
     lat_mosaic = np.vstack(imgs_lat_row)
     imgs_mosaic = np.vstack(imgs_row)
     return lon_mosaic, lat_mosaic, imgs_mosaic
-
-
-
-
-    imgs.append(img)
-    imgs_lon.append(img_lon)
-    imgs_lat.append(img_lat)
-
-
-imgs_lon + img.shape[0] * img_dtm
-
-plt.figure(dpi=800)
-plt.imshow(imgs_mosaic)
-plt.show()
-
-
-
-
 
 
