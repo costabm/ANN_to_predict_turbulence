@@ -39,7 +39,7 @@ def get_1_geotiff(tifpath, tfwpath, trim=True):
     Reads one geotiff file
     Returns the coordinates in UTM zone 33 [longitudes, latitudes] of the centre of each pixel, as well as each pixel height
     """
-    img = tifffile.imread(tifpath)
+    img = np.array(tifffile.imread(tifpath), dtype='float64')
     # removing the 1% overlapping cells.
     img[img<0] = 0  # some files have very large negative values that shoud just be 0
     if trim:
@@ -47,8 +47,8 @@ def get_1_geotiff(tifpath, tfwpath, trim=True):
     img_descrip = [eval(i) for i in open(tfwpath, 'r').read().splitlines()]
     assert img.shape[0] == img.shape[1] and img_descrip[0] == abs(img_descrip[3]), "Warning: Image is not a square so code needs to be updated"
     img_dtm = img_descrip[0]
-    img_lon = np.array([img_descrip[4] + x * img_dtm for x in range(img.shape[1])])
-    img_lat = np.array([img_descrip[5] - y * img_dtm for y in range(img.shape[1])])
+    img_lon = np.array([img_descrip[4] + x * img_dtm for x in range(img.shape[1])], dtype='float64')
+    img_lat = np.array([img_descrip[5] - y * img_dtm for y in range(img.shape[1])], dtype='float64')
     img_lons, img_lats = np.meshgrid(img_lon, img_lat)
     return img_lons, img_lats, img
 
