@@ -1,10 +1,10 @@
 import datetime
-
 import numpy as np
 import pandas as pd
 from read_0p1sec_data import create_processed_data_files, compile_all_processed_data_into_1_file
 from find_storms import create_storm_data_files, compile_storm_data_files, find_storm_timestamps, organized_dataframes_of_storms
 import matplotlib.pyplot as plt
+from elevation_profile_generator import elevation_profile_generator, plot_elevation_profile
 
 
 # create_processed_data_files(date_start=datetime.datetime.strptime('2015-01-01 00:00:00.0', '%Y-%m-%d %H:%M:%S.%f'), n_months=12*6, window='01:00:00', save_in_folder='processed_data')
@@ -74,6 +74,15 @@ for mast in mast_list:
 
 
 
+
+
+point_1 = [-35260., 6700201.]  # [longitude, latitude]
+point_2 = [ -34501., 6690211.]  # [longitude, latitude]
+step = 10.  # meters
+
+plot_elevation_profile(point_1=[-35260., 6700201.], point_2=[-34501., 6690211.], step_distance=100)
+
+dists, heights = elevation_profile_generator(point_1=[-35260., 6700201.], point_2=[-34501., 6690211.], step_distance=100)
 
 
 
