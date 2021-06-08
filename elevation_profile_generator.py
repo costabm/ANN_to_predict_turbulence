@@ -11,6 +11,13 @@ my_tree = cKDTree(np.array([lon_mosaic.ravel(), lat_mosaic.ravel()]).T)
 print('...done!')
 
 
+def get_point2_from_point1_dir_and_dist(point_1=[-34625., 6700051.], direction_deg=180, distance=5000):
+    lon_1, lat_1 = point_1
+    lon_2 = lon_1 + np.sin(np.deg2rad(direction_deg)) * distance
+    lat_2 = lat_1 + np.cos(np.deg2rad(direction_deg)) * distance
+    return np.array([lon_2, lat_2])
+
+
 def elevation_profile_generator(point_1, point_2, step_distance=10):
     """
     Args:

@@ -15,18 +15,6 @@ Option 1: https://www.engineeringtoolbox.com/utm-latitude-longitude-d_1370.html
 Option 2: http://rcn.montana.edu/Resources/Converter.aspx
 Option 3 (gives slighty different results, inaccurate!?): https://stackoverflow.com/questions/343865/how-to-convert-from-utm-to-latlng-in-python-or-javascript
 
-Mast coordinates Easting and Northing in UTM 32 (see SBJ-01-C4-KJE-01-TN-005 Analysis of extreme wind at the fjord crosssing):
-synn_EN_32 = [297558., 6672190.]
-svar_EN_32 = [297966., 6666513.]
-osp1_EN_32 = [292941., 6669471.]
-osp2_EN_32 = [292989., 6669215.]
-
-Mast coordinates, in UTM 33 (found iterativelly with http://rcn.montana.edu/Resources/Converter.aspx, by enforcing UTM 33 and matching the NATO UTM to that in UTM 32 -> 1 meter precision):
-synn_EN_33 = [-34515., 6705758.]
-svar_EN_33 = [-34625., 6700051.]
-osp1_EN_33 = [-39375., 6703464.]
-osp2_EN_33 = [-39350., 6703204.]
-
 A direct elevation profile script can be found below, but it is slow and it doesn't work in the Bjornafjord coordinates tested:
 https://www.geodose.com/2018/03/create-elevation-profile-generator-python.html
 
@@ -46,6 +34,20 @@ import os
 # Manually introduce the names of the 4 tif files representing the dtm10 maps of Bjornafjord
 fnames = ['dtm10_67m1_3_10m_z33.tif', 'dtm10_67m1_2_10m_z33.tif', 'dtm10_66m1_4_10m_z33.tif', 'dtm10_66m1_1_10m_z33.tif']  # top-left, top-right, bottom-left, bottom-right
 fpositions = ['11', '12', '21', '22']   # 'row column' of each "tile" to compose the merged "mosaic"
+
+
+# Mast coordinates Easting and Northing in UTM 32 (given in SBJ-01-C4-KJE-01-TN-005 Analysis of extreme wind at the fjord crosssing):
+synn_EN_32 = [297558., 6672190.]
+svar_EN_32 = [297966., 6666513.]
+osp1_EN_32 = [292941., 6669471.]
+osp2_EN_32 = [292989., 6669215.]
+
+# Mast coordinates, in UTM 33 (found iterativelly with http://rcn.montana.edu/Resources/Converter.aspx, by enforcing UTM 33 and matching the NATO UTM to that in UTM 32 -> 1 meter precision):
+synn_EN_33 = [-34515., 6705758.]
+svar_EN_33 = [-34625., 6700051.]
+osp1_EN_33 = [-39375., 6703464.]
+osp2_EN_33 = [-39350., 6703204.]
+
 
 def get_1_geotiff(tifpath, tfwpath, trim=True):
     """

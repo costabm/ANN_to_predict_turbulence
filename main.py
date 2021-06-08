@@ -4,16 +4,20 @@ import pandas as pd
 from read_0p1sec_data import create_processed_data_files, compile_all_processed_data_into_1_file
 from find_storms import create_storm_data_files, compile_storm_data_files, find_storm_timestamps, organized_dataframes_of_storms
 import matplotlib.pyplot as plt
-from elevation_profile_generator import elevation_profile_generator, plot_elevation_profile
+
+from elevation_profile_generator import elevation_profile_generator, plot_elevation_profile, get_point2_from_point1_dir_and_dist
+
+print('TURB INTENS. OF WIND SHOULD BE MEASURED AS 1 SECOND MEAN!! VALUES DIVIDED BY 10 MIN MEAN WIND (INSTEAD OF 0.1 SECOND VALUES?)')
 
 
-# create_processed_data_files(date_start=datetime.datetime.strptime('2015-01-01 00:00:00.0', '%Y-%m-%d %H:%M:%S.%f'), n_months=12*6, window='01:00:00', save_in_folder='processed_data')
+# create_processed_data_files(date_start=datetime.datetime.strptime('2018-01-01 00:00:00.0', '%Y-%m-%d %H:%M:%S.%f'), n_months=12*6, window='00:10:00', save_in_folder='processed_data')
 # compile_all_processed_data_into_1_file(data_str='01-00-00_stats', save_str='01-00-00_all_stats', save_json=True, foldername='processed_data')
 # create_storm_data_files(window='00:10:00', input_fname='01-00-00_all_stats')
 # compile_storm_data_files(save_str='00-10-00_all_storms')
 
 # Getting post-processed and organized storm data
-storm_df_all_means, storm_df_all_dirs, storm_df_all_Iu, storm_df_all_Iv, storm_df_all_Iw, storm_df_all_avail = organized_dataframes_of_storms()
+# storm_df_all_means, storm_df_all_dirs, storm_df_all_Iu, storm_df_all_Iv, storm_df_all_Iw, storm_df_all_avail = organized_dataframes_of_storms(foldername='processed_storm_data', compiled_fname='00-10-00_all_storms')
+storm_df_all_means, storm_df_all_dirs, storm_df_all_Iu, storm_df_all_Iv, storm_df_all_Iw, storm_df_all_avail = organized_dataframes_of_storms(foldername='processed_storm_data', compiled_fname='00-10-00_all_storms')
 
 # Plotting U, Iu and sigma_U along the fjord from measurements nearby (at different heights!):
 delta_dir = 30
@@ -41,8 +45,8 @@ for dir_min, dir_max in zip(dir_separators[:-1], dir_separators[1:]):
 
 
 # Checking variability in the std_u, for different U and different dir
-U_min = 13
-U_max = 14
+U_min = 12
+U_max = 15
 delta_dir = 20
 dir_separators = np.arange(0, 360.001, delta_dir)
 mast_list = ['synn', 'osp1', 'osp2', 'svar']
@@ -69,42 +73,33 @@ for mast in mast_list:
             u_std_mean.append(u_std.mean())
             u_std_std.append(u_std.std())
         # ax.errorbar(np.deg2rad(dir_centre), Iu_mean, yerr=Iu_std)
-        ax.errorbar(np.deg2rad(dir_centre), u_std_mean, yerr=u_std_std)
+        ax.errorbar(np.deg2rad(dir_centre), u_std_mean, yerr=u_std_std, label=anem)
+    plt.legend()
     plt.show()
 
 
 
 
-
-point_1 = [-35260., 6700201.]  # [longitude, latitude]
-point_2 = [ -34501., 6690211.]  # [longitude, latitude]
+# Wind-aligned terrain profiles
+point_1 = [-34625., 6700051.]
 step = 10.  # meters
 
-plot_elevation_profile(point_1=[-35260., 6700201.], point_2=[-34501., 6690211.], step_distance=100)
+point_2 = get_point2_from_point1_dir_and_dist(point_1=point_1, direction_deg=160, distance=15000)
 
-dists, heights = elevation_profile_generator(point_1=[-35260., 6700201.], point_2=[-34501., 6690211.], step_distance=100)
+plot_elevation_profile(point_1=point_1, point_2=point_2, step_distance=step)
+dists, heights = elevation_profile_generator(point_1=point_1, point_2=point_2, step_distance=step)
 
 
 # masts locations in UTM 32:
-# TRASH!!! THIS IS WRONG!!
-# def from_utm32_to_utm33(Easting, Northing):
-#     """This is found out iterativelly from http://rcn.montana.edu/Resources/Converter.aspx by doing:
-#     UTM Zone 32. Easting: 297966 Northing: 6666513
-#     UTM Zone 33. Easting: -34625 Northing: 6700051
-#     and confirming both visually and in NATO UTM coordinates that they are equivalent.
-#     """
-#     delta_Easting = -34625 - 297966
-#     delta_Northing = 6700051 - 6666513
-#     return [Easting + delta_Easting, Northing + delta_Northing]
-
 synn_EN_32 = [297558., 6672190.]
 svar_EN_32 = [297966., 6666513.]
 osp1_EN_32 = [292941., 6669471.]
 osp2_EN_32 = [292989., 6669215.]
 
-synn_EN_33 = from_utm32_to_utm33(synn_EN_32[0], synn_EN_32[1])
-svar_EN_33 = from_utm32_to_utm33(svar_EN_32[0], svar_EN_32[1])
-osp1_EN_33 = from_utm32_to_utm33(osp1_EN_32[0], osp1_EN_32[1])
-osp2_EN_33 = from_utm32_to_utm33(osp2_EN_32[0], osp2_EN_32[1])
+# masts locations in UTM 33:
+synn_EN_33 = [-34515., 6705758.]
+svar_EN_33 = [-34625., 6700051.]
+osp1_EN_33 = [-39375., 6703464.]
+osp2_EN_33 = [-39350., 6703204.]
 
 
