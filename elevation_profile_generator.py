@@ -40,6 +40,9 @@ def elevation_profile_generator(point_1, point_2, step_distance=10):
     new_dists = np.arange(    0, total_distance, total_distance/n_steps_float)
     new_lons = np.arange(point_1[0], point_2[0], delta_lon/n_steps_float)
     new_lats = np.arange(point_1[1], point_2[1], delta_lat/n_steps_float)
+    # Sometimes (rarely) either new_lons or new_lats manages to squeeze 1 more point in the arange. To avoid this do:
+    new_lons = new_lons[:min(len(new_lons), len(new_lats))]
+    new_lats = new_lats[:min(len(new_lons), len(new_lats))]
     print('idea: implement non uniform discretization! More resolution nearby, and less resolution far away')
     # # Flipping arrays, due to the sad fact that RectBivariateSpline only accepts strictly ascending points... NOT WORKING WELL
     # lat_mosaic_flipped = np.flip(lat_mosaic, axis=0)
