@@ -58,16 +58,17 @@ def plot_elevation_profile(point_1=[-35260., 6700201.], point_2=[-34501., 669021
     plt.ylabel('Height [m]')
     plt.show()
 
-    plt.figure(dpi=400)
+    plt.figure(dpi=600)
     plt.title('Topography and selected points')
     bbox = ((lon_mosaic.min(),   lon_mosaic.max(),
              lat_mosaic.min(),  lat_mosaic.max()))
     plt.xlim(bbox[0], bbox[1])
     plt.ylim(bbox[2], bbox[3])
     plt.imshow(imgs_mosaic, extent=bbox, zorder=0)
-    plt.scatter(point_1[0], point_1[1], s=10, c='red')
-    plt.scatter(point_2[0], point_2[1], s=10, c='red')
+    plt.scatter(point_1[0], point_1[1], s=2, c='red')
+    plt.scatter(point_2[0], point_2[1], s=2, c='red')
     plt.xlabel('Easting [m]')
     plt.ylabel('Northing [m]')
     plt.show()
 
+# plot_elevation_profile(point_1=[-35260., 6700201.], point_2=[-34501., 6690211.], step_distance=10)

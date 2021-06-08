@@ -85,4 +85,26 @@ plot_elevation_profile(point_1=[-35260., 6700201.], point_2=[-34501., 6690211.],
 dists, heights = elevation_profile_generator(point_1=[-35260., 6700201.], point_2=[-34501., 6690211.], step_distance=100)
 
 
+# masts locations in UTM 32:
+# TRASH!!! THIS IS WRONG!!
+# def from_utm32_to_utm33(Easting, Northing):
+#     """This is found out iterativelly from http://rcn.montana.edu/Resources/Converter.aspx by doing:
+#     UTM Zone 32. Easting: 297966 Northing: 6666513
+#     UTM Zone 33. Easting: -34625 Northing: 6700051
+#     and confirming both visually and in NATO UTM coordinates that they are equivalent.
+#     """
+#     delta_Easting = -34625 - 297966
+#     delta_Northing = 6700051 - 6666513
+#     return [Easting + delta_Easting, Northing + delta_Northing]
+
+synn_EN_32 = [297558., 6672190.]
+svar_EN_32 = [297966., 6666513.]
+osp1_EN_32 = [292941., 6669471.]
+osp2_EN_32 = [292989., 6669215.]
+
+synn_EN_33 = from_utm32_to_utm33(synn_EN_32[0], synn_EN_32[1])
+svar_EN_33 = from_utm32_to_utm33(svar_EN_32[0], svar_EN_32[1])
+osp1_EN_33 = from_utm32_to_utm33(osp1_EN_32[0], osp1_EN_32[1])
+osp2_EN_33 = from_utm32_to_utm33(osp2_EN_32[0], osp2_EN_32[1])
+
 
