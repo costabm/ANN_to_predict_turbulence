@@ -8,7 +8,6 @@ lon_mosaic, lat_mosaic, imgs_mosaic = get_all_geotiffs_merged()
 
 print('Building a K-D tree (takes approx. 1 minute)...')
 my_tree = cKDTree(np.array([lon_mosaic.ravel(), lat_mosaic.ravel()]).T)
-print('...done!')
 
 
 def get_point2_from_point1_dir_and_dist(point_1=[-34625., 6700051.], direction_deg=180, distance=5000):
@@ -36,14 +35,20 @@ def elevation_profile_generator(point_1, point_2, step_distance=10):
     delta_lon = point_2[0] - point_1[0]
     delta_lat = point_2[1] - point_1[1]
     total_distance = np.sqrt(delta_lon**2 + delta_lat**2)  # SRSS
-    n_steps_float = total_distance / step_distance
-    new_dists = np.arange(    0, total_distance, total_distance/n_steps_float)
-    new_lons = np.arange(point_1[0], point_2[0], delta_lon/n_steps_float)
-    new_lats = np.arange(point_1[1], point_2[1], delta_lat/n_steps_float)
-    # Sometimes (rarely) either new_lons or new_lats manages to squeeze 1 more point in the arange. To avoid this do:
-    new_lons = new_lons[:min(len(new_lons), len(new_lats))]
-    new_lats = new_lats[:min(len(new_lons), len(new_lats))]
-    print('idea: implement non uniform discretization! More resolution nearby, and less resolution far away')
+    n_steps = int(np.round(total_distance / step_distance))
+    new_dists = np.linspace(0, total_distance, n_steps)
+    new_lons = np.linspace(point_1[0], point_2[0], n_steps)
+    new_lats = np.linspace(point_1[1], point_2[1], n_steps)
+    # OLD VERSION DOWN
+    # n_steps_float = total_distance / step_distance
+    # new_dists = np.arange(    0, total_distance, total_distance/n_steps_float)
+    # new_lons = np.arange(point_1[0], point_2[0], delta_lon/n_steps_float)
+    # new_lats = np.arange(point_1[1], point_2[1], delta_lat/n_steps_float)
+    # if len(new_lons) != len(new_lats):  # Sometimes (rarely) either new_lons or new_lats manages to squeeze 1 more point in the arange. To avoid this do:
+    #     new_lons = new_lons[:min(len(new_lons), len(new_lats))]
+    #     new_lats = new_lats[:min(len(new_lons), len(new_lats))]
+    # OLD VERSION UP
+    # print('idea: implement non uniform discretization! More resolution nearby, and less resolution far away')
     # # Flipping arrays, due to the sad fact that RectBivariateSpline only accepts strictly ascending points... NOT WORKING WELL
     # lat_mosaic_flipped = np.flip(lat_mosaic, axis=0)
     # imgs_mosaic_flipped = np.flip(imgs_mosaic, axis=0)
