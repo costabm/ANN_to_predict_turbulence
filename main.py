@@ -11,6 +11,7 @@ from read_0p1sec_data import create_processed_data_files, compile_all_processed_
 from find_storms import create_storm_data_files, compile_storm_data_files, find_storm_timestamps, organized_dataframes_of_storms
 import matplotlib.pyplot as plt
 
+
 from elevation_profile_generator import elevation_profile_generator, plot_elevation_profile, get_point2_from_point1_dir_and_dist
 
 
@@ -90,7 +91,7 @@ def test_elevation_profile_at_given_point_dir_dist(point_1=[-34625., 6700051.], 
 
 
 def get_all_10_min_data_at_z_48m(U_min = 5, step_distance=10., total_distance=5000.):
-    print('Collecting all 10-min wind data... (takes approx. 3 minutes)')
+    print('Collecting all 10-min wind data... (takes 10-15 minutes)')
     min10_df_all_means, min10_df_all_dirs, min10_df_all_Iu, min10_df_all_Iv, min10_df_all_Iw, min10_df_all_avail = organized_dataframes_of_storms(foldername='processed_data', compiled_fname='00-10-00_all_stats')
     columns_to_drop = ['ts', 'osp1_C', 'osp2_C', 'svar_B','svar_C','synn_B','synn_C']  # Discarding all data that are not at Z=48m
     X_means_df = min10_df_all_means.drop(columns=columns_to_drop)
@@ -139,10 +140,8 @@ y_max = np.max(y_data_nonnorm)
 X_data = X_data_nonnorm/X_maxs
 y_data = y_data_nonnorm/y_max
 
-
 # Remove the direction, to be extra certain that the NN doesn't "cheat"
-X_data = np.delete(X_data, 1, axis=1) # !!!!
-
+# X_data = np.delete(X_data, 1, axis=1) # !!!!
 
 # Separating training and testing data
 train_angle_domain = [[x, x+5] for x in np.arange(0, 360, 10)]  # in degrees
@@ -153,67 +152,84 @@ y_train = Tensor(y_data[train_bools]).to(device)
 X_test =  Tensor(X_data[test_bools]).to(device)
 y_test =  Tensor(y_data[test_bools]).to(device)
 
-# Hyperparameters
 n_samples_train = X_train.shape[0]
-n_hidden_layers = 2
-learn_rate = 5E-4
-weight_decay = 1E-4
-momentum = 0.9
-n_epochs = 50
-batch_size_desired = 100  # desired because it might not be an integer divisor of n_samples_train, therefore the nearest divisor is found and used
-batch_size = min(sympy.divisors(n_samples_train), key=lambda x:abs(x-batch_size_desired))  # Finds the integer divisor of n_samples_train that is closer to the batch_size_desired
-print(f'Batch size is {batch_size}')
+batch_size_possibilities = sympy.divisors(n_samples_train)  # [1, 2, 4, 23, 46, 92, 4051, 8102, 16204, 93173, 186346, 372692]
 
-# Building a neural network dynamically
-torch.manual_seed(0)  # make the following random numbers reproducible
-n_features = X_train.shape[1]  # number of independent variables in the polynomial
-n_hidden_layer_neurons = n_features  # Fancy for: More monomials, more neurons...
-my_nn = torch.nn.Sequential()
-my_activation_func = torch.nn.ELU  # Relu, ELU, LeakyReLU, etc.
-my_nn.add_module(name='0', module=torch.nn.Linear(n_features, n_hidden_layer_neurons))  # Second layer
-my_nn.add_module(name='0A', module=my_activation_func())  # Activation function
-for i in range(n_hidden_layers):  # Hidden layers
-    my_nn.add_module(name=str(i + 1), module=torch.nn.Linear(n_hidden_layer_neurons, n_hidden_layer_neurons))
-    my_nn.add_module(name=f'{i + 1}A', module=my_activation_func())
-my_nn.add_module(name=str(n_hidden_layers + 1), module=torch.nn.Linear(n_hidden_layer_neurons, 1))  # Output layer
-criterion = MSELoss()  # define the loss function
-optimizer = SGD(my_nn.parameters(), lr=learn_rate, weight_decay=weight_decay, momentum=momentum)  # define the optimizer
-torch.seed()  # make random numbers again random
-my_nn.to(device)  # To GPU if available
+# Hyperparameters
+def train_and_test_NN(X_train, y_train, X_test, y_test, hp, print_loss_per_epoch=True):
+    """
+    Args:
+        X_train:
+        y_train:
+        X_test:
+        y_test:
+        hp:  hyperparameters. e.g. {'lr':1E-1, 'batch_size':92, 'weight_decay':1E-4, 'momentum':0.9, 'n_epochs':10, 'n_hid_layers':2, 'n_samples_test':10000}
+        print_loss_per_epoch:
+    Returns:
+    """
+    learn_rate = hp['lr']
+    batch_size = hp['batch_size']
+    weight_decay = hp['weight_decay']
+    momentum = hp['momentum']
+    n_epochs = hp['n_epochs']
+    n_hid_layers = hp['n_hid_layers']
+    n_samples_test = hp['n_samples_test']
 
-# Training
-# writer = SummaryWriter(f'runs/my_math_learning_tensorboard')  # For later using TensorBoard, for visualization
-assert (n_samples_train/batch_size).is_integer(), "Change batch size so that n_iterations is integer"
-n_iterations = int(n_samples_train/batch_size)
-for epoch in range(n_epochs):
-    epoch_loss = 0
-    idxs_shuffled = torch.randperm(n_samples_train)
-    for b in range(n_iterations):
-        batch_idxs = idxs_shuffled[b*batch_size:b*batch_size+batch_size]
-        y_pred = my_nn(Variable(X_train[batch_idxs]))
-        loss = criterion(y_pred, Variable(y_train[batch_idxs].view(batch_size,1), requires_grad=False))
-        epoch_loss = loss.item()
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-    print("Epoch: {} Loss: {}".format(epoch, epoch_loss))
-    # writer.add_scalar('Training Loss', epoch_loss, global_step=epoch)  # writing to TensorBoard
+    n_samples_train = X_train.shape[0]
+    # Building a neural network dynamically
+    torch.manual_seed(0)  # make the following random numbers reproducible
+    n_features = X_train.shape[1]  # number of independent variables in the polynomial
+    n_hid_layer_neurons = n_features  # Fancy for: More monomials, more neurons...
+    my_nn = torch.nn.Sequential()
+    my_activation_func = torch.nn.ELU  # ReLU, ELU, LeakyReLU, etc.
+    my_nn.add_module(name='0', module=torch.nn.Linear(n_features, n_hid_layer_neurons))  # Second layer
+    my_nn.add_module(name='0A', module=my_activation_func())  # Activation function
+    for i in range(n_hid_layers):  # Hidden layers
+        my_nn.add_module(name=str(i + 1), module=torch.nn.Linear(n_hid_layer_neurons, n_hid_layer_neurons))
+        my_nn.add_module(name=f'{i + 1}A', module=my_activation_func())
+    my_nn.add_module(name=str(n_hid_layers + 1), module=torch.nn.Linear(n_hid_layer_neurons, 1))  # Output layer
+    criterion = MSELoss()  # define the loss function
+    optimizer = SGD(my_nn.parameters(), lr=learn_rate, weight_decay=weight_decay, momentum=momentum)  # define the optimizer
+    torch.seed()  # make random numbers again random
+    my_nn.to(device)  # To GPU if available
 
-# Testing
-n_samples_test = 10000
-test_idxs_all_shuffled = torch.randperm(X_test.shape[0])
-test_idxs = test_idxs_all_shuffled[:n_samples_test]
+    # Training
+    # writer = SummaryWriter(f'runs/my_math_learning_tensorboard')  # For later using TensorBoard, for visualization
+    assert (n_samples_train/batch_size).is_integer(), "Change batch size so that n_iterations is integer"
+    n_iterations = int(n_samples_train/batch_size)
+    for epoch in range(n_epochs):
+        epoch_loss = 0
+        idxs_shuffled = torch.randperm(n_samples_train)
+        for b in range(n_iterations):
+            batch_idxs = idxs_shuffled[b*batch_size:b*batch_size+batch_size]
+            y_pred = my_nn(Variable(X_train[batch_idxs]))
+            loss = criterion(y_pred, Variable(y_train[batch_idxs].view(batch_size,1), requires_grad=False))
+            epoch_loss = loss.item()
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+        if print_loss_per_epoch:
+            print("Epoch: {} Loss: {}".format(epoch, epoch_loss))
+        # writer.add_scalar('Training Loss', epoch_loss, global_step=epoch)  # writing to TensorBoard
 
-with torch.no_grad():
-    y_test_pred = my_nn(Variable(X_test[test_idxs]))
-    # if normalize_y is False:
-    #     y_test_pred = normalize_y_func(y_test_pred, denormalize=True)
-    SS_res_test = torch.sum((y_test[test_idxs].view(n_samples_test,1) - y_test_pred) ** 2)
-    t_test_pred_mean = torch.mean(y_test_pred)
-    SS_tot_test = torch.sum((y_test[test_idxs] - t_test_pred_mean) ** 2)
-    R2_test = 1 - SS_res_test / SS_tot_test
-print('SS of residuals on test dataset: ' + str(SS_res_test))
-print('R2 on test dataset: ' + str(R2_test) + ' <----------------------')
-print(f"Prediction: {y_test_pred[-8:].flatten()}")
-print(f"Expected:   {y_test[test_idxs][-8:].flatten()}")
+    # Testing
+    test_idxs_all_shuffled = torch.randperm(X_test.shape[0])
+    test_idxs = test_idxs_all_shuffled[:n_samples_test]
+
+    with torch.no_grad():
+        y_test_pred = my_nn(Variable(X_test[test_idxs]))
+        # if normalize_y is False:
+        #     y_test_pred = normalize_y_func(y_test_pred, denormalize=True)
+        SS_res_test = torch.sum((y_test[test_idxs].view(n_samples_test,1) - y_test_pred) ** 2)
+        t_test_pred_mean = torch.mean(y_test_pred)
+        SS_tot_test = torch.sum((y_test[test_idxs] - t_test_pred_mean) ** 2)
+        R2_test = 1 - SS_res_test / SS_tot_test
+    # print('SS of residuals on test dataset: ' + str(SS_res_test))
+    print(f'R2 on test dataset ----> {R2_test} <---- . Learning rate: {learn_rate}')
+    # print(f"Prediction: {y_test_pred[-8:].flatten()}")
+    # print(f"Expected:   {y_test[test_idxs][-8:].flatten()}")
+    print(f'Batch size: {batch_size}')
+
+hp = {'lr':1E-1, 'batch_size':8102, 'weight_decay':1E-4, 'momentum':0.8, 'n_epochs':20, 'n_hid_layers':2, 'n_samples_test':10000}
+train_and_test_NN(X_train, y_train, X_test, y_test, hp=hp, print_loss_per_epoch=True)
 
