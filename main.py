@@ -90,6 +90,16 @@ def test_elevation_profile_at_given_point_dir_dist(point_1=[-34625., 6700051.], 
     return dists, heights
 
 
+
+# todo: NOT WORKING WELL
+def convert_angle_to_0_2pi_interval(a, input_and_output_in_degrees=True):
+    if input_and_output_in_degrees:
+        return np.rad2deg(np.arctan2(np.sin(np.deg2rad(a)), np.cos(np.deg2rad(a))) + np.pi)
+    else:
+        return np.arctan2(np.sin(a), np.cos(a)) + np.pi
+# todo: NOT WORKING WELL
+
+
 def get_all_10_min_data_at_z_48m(U_min = 5, step_distance=10., total_distance=5000.):
     print('Collecting all 10-min wind data... (takes 10-15 minutes)')
     min10_df_all_means, min10_df_all_dirs, min10_df_all_Iu, min10_df_all_Iv, min10_df_all_Iw, min10_df_all_avail = organized_dataframes_of_storms(foldername='processed_data', compiled_fname='00-10-00_all_stats')
