@@ -157,48 +157,8 @@ def get_all_10_min_data_at_z_48m(U_min = 5, terrain_profile_dists=[i*(5.+5.*i) f
 # MACHINE LEARNING
 ########################################
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')  # 'cuda' or 'cpu'. 'cuda' doesn't seem to be working...
-
-##################################################################
-# Getting the data for first time                               ##
-X_data_nonnorm, y_data_nonnorm, mast_anem_list, start_idxs_of_each_anem = get_all_10_min_data_at_z_48m() ##  takes a few minutes...
-##################################################################
-# Saving data
-data_path = os.path.join(os.getcwd(), 'processed_data', 'X_y_ML_ready_data')
-np.savez_compressed(data_path, X=X_data_nonnorm, y=y_data_nonnorm, m=mast_anem_list, i=start_idxs_of_each_anem)
-##################################################################
-# Loading data already saved
-data_path = os.path.join(os.getcwd(), 'processed_data', 'X_y_ML_ready_data')
-loaded_data = np.load(data_path + '.npz')
-X_data_nonnorm = loaded_data['X']
-y_data_nonnorm = loaded_data['y']
-mast_anem_list = loaded_data['m']
-start_idxs_of_each_anem = loaded_data['i']
-##################################################################
-
-# Normalizing data
-X_maxs = np.max(X_data_nonnorm, axis=0)
-y_max = np.max(y_data_nonnorm)
-X_data = X_data_nonnorm/X_maxs
-y_data = y_data_nonnorm/y_max
-
-# Remove the direction, to be extra certain that the NN doesn't "cheat"
-# X_data = np.delete(X_data, 1, axis=1) # NOT WORKING FOR THE BEAUTIFUL PLOTS THAT WILL REQUIRE THESE VALUES
-
-# Separating training and testing data
-train_angle_domain = [[x, x+10] for x in np.arange(0, 360, 20)]  # in degrees
-test_angle_domain  = [[x+10, x+20] for x in np.arange(0, 360, 20)]  # in degrees
-train_bools = np.logical_or.reduce([(a[0]<X_data_nonnorm[:,1]) & (X_data_nonnorm[:,1]<a[1]) for a in train_angle_domain])  # https://stackoverflow.com/questions/20528328/numpy-logical-or-for-more-than-two-arguments
-test_bools =  np.logical_or.reduce([(a[0]<X_data_nonnorm[:,1]) & (X_data_nonnorm[:,1]<a[1]) for a in test_angle_domain])
-X_train = Tensor(X_data[train_bools]).to(device)
-y_train = Tensor(y_data[train_bools]).to(device)
-X_test =  Tensor(X_data[test_bools]).to(device)
-y_test =  Tensor(y_data[test_bools]).to(device)
-
-n_samples_train = X_train.shape[0]
-batch_size_possibilities = sympy.divisors(n_samples_train)  # [1, 2, 4, 23, 46, 92, 4051, 8102, 16204, 93173, 186346, 372692]
-
 # Neural network
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')  # 'cuda' or 'cpu'. 'cuda' doesn't seem to be working...
 def train_and_test_NN(X_train, y_train, X_test, y_test, hp, print_loss_per_epoch=True):
     """
     Args:
@@ -279,8 +239,53 @@ def train_and_test_NN(X_train, y_train, X_test, y_test, hp, print_loss_per_epoch
     # return X_test[test_idxs], y_test[test_idxs].view(n_samples_test,1), y_test_pred, test_idxs
     return y_test_pred
 
+##################################################################
+# Getting the data for first time                               ##
+X_data_nonnorm, y_data_nonnorm, mast_anem_list, start_idxs_of_each_anem = get_all_10_min_data_at_z_48m() ##  takes a few minutes...
+##################################################################
+# Saving data
+data_path = os.path.join(os.getcwd(), 'processed_data', 'X_y_ML_ready_data')
+np.savez_compressed(data_path, X=X_data_nonnorm, y=y_data_nonnorm, m=mast_anem_list, i=start_idxs_of_each_anem)
+##################################################################
+# Loading data already saved
+data_path = os.path.join(os.getcwd(), 'processed_data', 'X_y_ML_ready_data')
+loaded_data = np.load(data_path + '.npz')
+X_data_nonnorm = loaded_data['X']
+y_data_nonnorm = loaded_data['y']
+mast_anem_list = loaded_data['m']
+start_idxs_of_each_anem = loaded_data['i']
+##################################################################
+
+# Normalizing data
+X_maxs = np.max(X_data_nonnorm, axis=0)
+y_max = np.max(y_data_nonnorm)
+X_data = X_data_nonnorm/X_maxs
+y_data = y_data_nonnorm/y_max
+
+
+##################################################################################################################
+# TRAINING FROM 18 ALTERNATE-10-DEG-WIDE-WIND-SECTORS AND TESTING THE REMAINING 18 SECTORS, AT EACH ANEMOMETER
+##################################################################################################################
+
+# Remove the direction, to be extra certain that the NN doesn't "cheat"
+# X_data = np.delete(X_data, 1, axis=1) # NOT WORKING FOR THE BEAUTIFUL PLOTS THAT WILL REQUIRE THESE VALUES
+
+# Separating training and testing data
+train_angle_domain = [[x, x+22.5] for x in np.arange(0, 360, 45)]  # in degrees
+test_angle_domain  = [[x+22.5, x+45] for x in np.arange(0, 360, 45)]  # in degrees
+train_bools = np.logical_or.reduce([(a[0]<X_data_nonnorm[:,1]) & (X_data_nonnorm[:,1]<a[1]) for a in train_angle_domain])  # https://stackoverflow.com/questions/20528328/numpy-logical-or-for-more-than-two-arguments
+test_bools =  np.logical_or.reduce([(a[0]<X_data_nonnorm[:,1]) & (X_data_nonnorm[:,1]<a[1]) for a in test_angle_domain])
+X_train = Tensor(X_data[train_bools]).to(device)
+y_train = Tensor(y_data[train_bools]).to(device)
+X_test =  Tensor(X_data[test_bools]).to(device)
+y_test =  Tensor(y_data[test_bools]).to(device)
+
+n_samples_train = X_train.shape[0]
+batch_size_possibilities = sympy.divisors(n_samples_train)  # [1, 2, 4, 23, 46, 92, 4051, 8102, 16204, 93173, 186346, 372692]
+
+
 # Getting values to predict and predicted values
-hp = {'lr':1E-1, 'batch_size':1961, 'weight_decay':1E-4, 'momentum':0.9, 'n_epochs':25, 'n_hid_layers':1}
+hp = {'lr':1E-1, 'batch_size':3958, 'weight_decay':1E-4, 'momentum':0.9, 'n_epochs':25, 'n_hid_layers':1}
 y_pred = train_and_test_NN(X_train, y_train, X_test, y_test, hp=hp, print_loss_per_epoch=True)
 
 # Choosing only the results of a given anemometer (e.g. svar -> Svarvahelleholmen)
@@ -318,13 +323,53 @@ std_u_std_pred_per_sector_svar =   np.array([np.std( std_u_pred_svar[l]) for l i
 # Plotting beautiful plots
 fig = plt.figure(figsize=(8,6), dpi=400)
 ax = fig.add_subplot(projection='polar')
-ax.scatter( np.deg2rad(dir_train_svar), std_u_train_svar, s=1, alpha=0.5, c='lime', label='Training data')
-ax.scatter( np.deg2rad(dir_test_svar) , std_u_test_svar , s=1, alpha=0.5, c='blue', label='Testing data')
-ax.errorbar(np.deg2rad(dir_means_train_per_sector_svar), std_u_means_train_per_sector_svar, std_u_std_train_per_sector_svar, c='green', elinewidth=5, alpha=0.9, fmt=',', label='$\sigma(train)$')
-ax.errorbar(np.deg2rad(dir_means_test_per_sector_svar) , std_u_means_test_per_sector_svar , std_u_std_test_per_sector_svar , c='black', elinewidth=5, alpha=0.8, fmt=',', label='$\sigma(test)$')
-ax.errorbar(np.deg2rad(dir_means_test_per_sector_svar) , std_u_means_pred_per_sector_svar , std_u_std_pred_per_sector_svar , c='orange', elinewidth=2, alpha=0.9, label='Prediction')
-plt.legend(loc='best')
-plt.ylim((None,5))
-ax.text('$\sigma(u)$')
+plt.title('Anemometer at Svarvahelleholmen (Z = 48 m)\n')
+ax.set_theta_zero_location("N")
+ax.set_theta_direction(-1)
+ax.scatter( np.deg2rad(dir_train_svar), std_u_train_svar, s=1, alpha=0.6, c='lightgreen', label='Training data')
+ax.scatter( np.deg2rad(dir_test_svar) , std_u_test_svar , s=1, alpha=0.6, c='skyblue', label='Testing data')
+ax.errorbar(np.deg2rad(dir_means_train_per_sector_svar), std_u_means_train_per_sector_svar, std_u_std_train_per_sector_svar, c='forestgreen', elinewidth=3, alpha=0.9, fmt='.', label='$\sigma(train)$')
+ax.errorbar(np.deg2rad(dir_means_test_per_sector_svar) , std_u_means_test_per_sector_svar , std_u_std_test_per_sector_svar , c='dodgerblue', elinewidth=4, alpha=0.8, fmt='o', label='$\sigma(test)$')
+ax.errorbar(np.deg2rad(dir_means_test_per_sector_svar) , std_u_means_pred_per_sector_svar , std_u_std_pred_per_sector_svar , c='orange', elinewidth=2, alpha=0.9, fmt='.', label='Prediction', zorder=5)
+handles, labels = ax.get_legend_handles_labels()
+plt.ylim((None,4))
+ax.text(np.deg2rad(18), 4.4, '$\sigma(u)\/[m/s]$')
+plt.savefig(os.path.join(os.getcwd(), 'plots', 'std_u_Svar.png'))
 plt.show()
+fig = plt.figure(figsize=(2,1.6), dpi=400)
+plt.axis('off')
+plt.legend(handles, labels)
+plt.savefig(os.path.join(os.getcwd(), 'plots', 'std_u_Svar_legend.png'))
+plt.show()
+
+
+##################################################################################################################
+# TRAINING FROM 5 ANEMOMETERS AND TESTING REMAINING 1 ANEMOMETER AT SYNNOYTANGEN
+##################################################################################################################
+
+# Remove the direction, to be extra certain that the NN doesn't "cheat"
+# X_data = np.delete(X_data, 1, axis=1) # NOT WORKING FOR THE BEAUTIFUL PLOTS THAT WILL REQUIRE THESE VALUES
+
+# Separating training and testing data
+n_samples = X_data.shape[0]
+start_idxs_of_each_anem_2 = np.array(start_idxs_of_each_anem.tolist() + [n_samples])  # this one includes the final index as well
+anem_to_test = 'synn_A'
+anem_start_idx = start_idxs_of_each_anem_2[np.where(mast_anem_list == anem_to_test)[0]][0]
+anem_end_idx = start_idxs_of_each_anem_2[np.where(mast_anem_list == anem_to_test)[0]+1][0]
+test_idxs = np.where((anem_start_idx <= np.arange(n_samples)) & (np.arange(n_samples) < anem_end_idx))[0]
+train_idxs = np.array(list(set(np.arange(n_samples)) - set(test_idxs)))
+X_train = Tensor(X_data[train_idxs]).to(device)
+y_train = Tensor(y_data[train_idxs]).to(device)
+X_test =  Tensor(X_data[test_idxs]).to(device)
+y_test =  Tensor(y_data[test_idxs]).to(device)
+
+n_samples_train = X_train.shape[0]
+batch_size_possibilities = np.array(sympy.divisors(n_samples_train))  # [1, 2, 4, 23, 46, 92, 4051, 8102, 16204, 93173, 186346, 372692]
+batch_size_desired = 4000
+batch_size = min(batch_size_possibilities, key=lambda x:abs(x-batch_size_desired))
+
+# Getting values to predict and predicted values
+hp = {'lr':1E-1, 'batch_size':batch_size, 'weight_decay':1E-4, 'momentum':0.9, 'n_epochs':35, 'n_hid_layers':2}
+y_pred = train_and_test_NN(X_train, y_train, X_test, y_test, hp=hp, print_loss_per_epoch=True)
+
 
