@@ -343,6 +343,7 @@ plt.savefig(os.path.join(os.getcwd(), 'plots', 'std_u_Svar_legend.png'))
 plt.show()
 
 
+
 ##################################################################################################################
 # TRAINING FROM 5 ANEMOMETERS AND TESTING REMAINING 1 ANEMOMETER AT SYNNOYTANGEN
 ##################################################################################################################
