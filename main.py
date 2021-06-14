@@ -3,18 +3,45 @@ import os
 import sympy
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+from matplotlib import cm
+from matplotlib.colors import Normalize
+from scipy.interpolate import interpn
 import bisect
 import torch
 from torch import Tensor
-from torch.nn import Linear, MSELoss, functional as F
+from torch.nn import Linear, MSELoss, L1Loss, functional as F
 from torch.optim import SGD, Adam, RMSprop
 from torch.autograd import Variable
 from read_0p1sec_data import create_processed_data_files, compile_all_processed_data_into_1_file
 from find_storms import create_storm_data_files, compile_storm_data_files, find_storm_timestamps, organized_dataframes_of_storms
-import matplotlib.pyplot as plt
-
 
 from elevation_profile_generator import elevation_profile_generator, plot_elevation_profile, get_point2_from_point1_dir_and_dist
+
+def density_scatter(x , y, ax = None, sort = True, bins = 20, **kwargs )   :
+    """
+    Scatter plot colored by 2d histogram
+    """
+    if ax is None :
+        fig , ax = plt.subplots(figsize=(8,6), dpi=400, subplot_kw={'projection': 'polar'})
+        ax.set_theta_zero_location("N")
+        ax.set_theta_direction(-1)
+    data , x_e, y_e = np.histogram2d(np.sin(x)*y, np.cos(x)*y, bins = bins, density = True)
+    # z = interpn( ( 0.5*(x_e[1:] + x_e[:-1]) , 0.5*(y_e[1:]+y_e[:-1]) ) , data , np.vstack([x,y]).T , method = "splinef2d", bounds_error = False)
+    x_i = 0.5 * (x_e[1:] + x_e[:-1])
+    y_i = 0.5 * (y_e[1:] + y_e[:-1])
+    z = interpn((x_i, y_i), data, np.vstack([np.sin(x)*y, np.cos(x)*y]).T, method="splinef2d", bounds_error=False)
+    #To be sure to plot all data
+    z[np.where(np.isnan(z))] = 0.0
+    # Sort the points by density, so that the densest points are plotted last
+    if sort :
+        idx = z.argsort()
+        x, y, z = x[idx], y[idx], z[idx]
+    ax.scatter( x, y, c=z, s=1, alpha=0.3, **kwargs )
+    norm = Normalize(vmin = np.min(z), vmax = np.max(z))
+    cbar = fig.colorbar(cm.ScalarMappable(norm = norm), ax=ax)
+    cbar.ax.set_ylabel('Density')
+    return ax
 
 
 # create_processed_data_files(date_start=datetime.datetime.strptime('2018-01-01 00:00:00.0', '%Y-%m-%d %H:%M:%S.%f'), n_months=12*6, window='00:10:00', save_in_folder='processed_data')
@@ -91,7 +118,7 @@ def test_elevation_profile_at_given_point_dir_dist(point_1=[-34625., 6700051.], 
     if plot:
         plot_elevation_profile(point_1=point_1, point_2=point_2, step_distance=step_distance, list_of_distances=list_of_distances)
     return dists, heights
-# test_elevation_profile_at_given_point_dir_dist(point_1=[-34625., 6700051.], direction_deg=180,step_distance=False,total_distance=False, list_of_distances=[i*(5.+5.*i) for i in range(45)],plot=True)
+test_elevation_profile_at_given_point_dir_dist(point_1=[-34625., 6700051.], direction_deg=180,step_distance=False,total_distance=False, list_of_distances=[i*(5.+5.*i) for i in range(45)],plot=True)
 # test_elevation_profile_at_given_point_dir_dist(point_1=[-34625., 6700051.], direction_deg=180, step_distance=10., total_distance=9900., list_of_distances=False, plot=True)
 
 
@@ -176,20 +203,21 @@ def train_and_test_NN(X_train, y_train, X_test, y_test, hp, print_loss_per_epoch
     momentum = hp['momentum']
     n_epochs = hp['n_epochs']
     n_hid_layers = hp['n_hid_layers']
+    my_activation_func = hp['activation']  # ReLU, ELU, LeakyReLU, etc.
+    criterion = hp['loss']  # define the loss function
     n_samples_train = X_train.shape[0]
     # Building a neural network dynamically
     torch.manual_seed(0)  # make the following random numbers reproducible
     n_features = X_train.shape[1]  # number of independent variables in the polynomial
     n_hid_layer_neurons = n_features  # Fancy for: More monomials, more neurons...
     my_nn = torch.nn.Sequential()
-    my_activation_func = torch.nn.ELU  # ReLU, ELU, LeakyReLU, etc.
     my_nn.add_module(name='0', module=torch.nn.Linear(n_features, n_hid_layer_neurons))  # Second layer
     my_nn.add_module(name='0A', module=my_activation_func())  # Activation function
     for i in range(n_hid_layers):  # Hidden layers
         my_nn.add_module(name=str(i + 1), module=torch.nn.Linear(n_hid_layer_neurons, n_hid_layer_neurons))
         my_nn.add_module(name=f'{i + 1}A', module=my_activation_func())
     my_nn.add_module(name=str(n_hid_layers + 1), module=torch.nn.Linear(n_hid_layer_neurons, 1))  # Output layer
-    criterion = MSELoss()  # define the loss function
+
     optimizer = SGD(my_nn.parameters(), lr=learn_rate, weight_decay=weight_decay, momentum=momentum)  # define the optimizer
     torch.seed()  # make random numbers again random
     my_nn.to(device)  # To GPU if available
@@ -214,33 +242,19 @@ def train_and_test_NN(X_train, y_train, X_test, y_test, hp, print_loss_per_epoch
     # Testing
     n_samples_test = X_test.shape[0]
     with torch.no_grad():
-        y_test_pred = my_nn(Variable(X_test))
-        SS_res_test = torch.sum((y_test.view(n_samples_test,1) - y_test_pred) ** 2)
-        t_test_pred_mean = torch.mean(y_test_pred)
-        SS_tot_test = torch.sum((y_test - t_test_pred_mean) ** 2)
+        y_pred = my_nn(Variable(X_test))
+        SS_res_test = torch.sum((y_test.view(n_samples_test,1) - y_pred.view(n_samples_test,1))**2)
+        y_pred_mean = torch.mean(y_pred)
+        SS_tot_test = torch.sum((y_test.view(n_samples_test,1) - y_pred_mean)**2)
         R2_test = 1 - SS_res_test / SS_tot_test
     print(f'R2 on test dataset ----> {R2_test} <---- . Learning rate: {learn_rate}')
-    print(f"Prediction: {y_test_pred[-8:].flatten()}")
+    print(f"Prediction: {y_pred[-8:].flatten()}")
     print(f"Expected:   {y_test[-8:].flatten()}")
     print(f'Batch size: {batch_size}')
-    # OLD VERSION, WHEN n_samples_test < len(X_test.shape[0])
-    # test_idxs = torch.randperm(n_samples_test)  # this is not necessary when all X_test are tested
-    # with torch.no_grad():
-    #     y_test_pred = my_nn(Variable(X_test[test_idxs]))
-    #     SS_res_test = torch.sum((y_test[test_idxs].view(n_samples_test,1) - y_test_pred) ** 2)
-    #     t_test_pred_mean = torch.mean(y_test_pred)
-    #     SS_tot_test = torch.sum((y_test[test_idxs] - t_test_pred_mean) ** 2)
-    #     R2_test = 1 - SS_res_test / SS_tot_test
-    # print('SS of residuals on test dataset: ' + str(SS_res_test))
-    # print(f'R2 on test dataset ----> {R2_test} <---- . Learning rate: {learn_rate}')
-    # print(f"Prediction: {y_test_pred[-8:].flatten()}")
-    # print(f"Expected:   {y_test[test_idxs][-8:].flatten()}")
-    # print(f'Batch size: {batch_size}')
-    # return X_test[test_idxs], y_test[test_idxs].view(n_samples_test,1), y_test_pred, test_idxs
-    return y_test_pred
+    return y_pred
 
 ##################################################################
-# Getting the data for first time                               ##
+# Getting the data for first time
 X_data_nonnorm, y_data_nonnorm, mast_anem_list, start_idxs_of_each_anem = get_all_10_min_data_at_z_48m() ##  takes a few minutes...
 ##################################################################
 # Saving data
@@ -254,13 +268,41 @@ X_data_nonnorm = loaded_data['X']
 y_data_nonnorm = loaded_data['y']
 mast_anem_list = loaded_data['m']
 start_idxs_of_each_anem = loaded_data['i']
-##################################################################
-
+X_360dirs = np.searchsorted(np.arange(0,360,1), X_data_nonnorm[:,1], side='right') - 1
+#################################################################
 # Normalizing data
 X_maxs = np.max(X_data_nonnorm, axis=0)
 y_max = np.max(y_data_nonnorm)
 X_data = X_data_nonnorm/X_maxs
 y_data = y_data_nonnorm/y_max
+##################################################################
+
+##################################################################################################################
+# Statistical analyses of the distribution of turbulence
+##################################################################################################################
+# Separating training and testing data. Plotting Data
+n_samples = X_data.shape[0]
+start_idxs_of_each_anem_2 = np.array(start_idxs_of_each_anem.tolist() + [n_samples])  # this one includes the final index as well
+for anem_idx in range(6):
+    anem_slice = slice(start_idxs_of_each_anem_2[anem_idx],start_idxs_of_each_anem_2[anem_idx+1])
+    density_scatter(np.deg2rad(X_data_nonnorm[anem_slice,1]), y_data_nonnorm[anem_slice])
+    plt.title(f'{mast_anem_list[anem_idx]}')
+    plt.ylim([None, 4])
+    plt.show()
+
+
+
+
+# todo: work on this
+idxs_360dir = np.where(X_360dirs[anem_slice] == d)[0]
+hist = np.histogram(y_data_nonnorm[idxs_360dir], bins=10, density=True)
+hist_x, hist_y = hist
+plt.hist(y_data_nonnorm[idxs_360dir], bins=30)
+plt.show()
+
+
+
+
 
 
 ##################################################################################################################
@@ -285,7 +327,7 @@ batch_size_possibilities = sympy.divisors(n_samples_train)  # [1, 2, 4, 23, 46, 
 
 
 # Getting values to predict and predicted values
-hp = {'lr':1E-1, 'batch_size':3958, 'weight_decay':1E-4, 'momentum':0.9, 'n_epochs':25, 'n_hid_layers':1}
+hp = {'lr':1E-1, 'batch_size':3958, 'weight_decay':1E-4, 'momentum':0.9, 'n_epochs':25, 'n_hid_layers':1, 'activation':torch.nn.ReLU, 'loss':MSELoss()}
 y_pred = train_and_test_NN(X_train, y_train, X_test, y_test, hp=hp, print_loss_per_epoch=True)
 
 # Choosing only the results of a given anemometer (e.g. svar -> Svarvahelleholmen)
@@ -336,7 +378,7 @@ plt.ylim((None,4))
 ax.text(np.deg2rad(18), 4.4, '$\sigma(u)\/[m/s]$')
 plt.savefig(os.path.join(os.getcwd(), 'plots', 'std_u_Svar.png'))
 plt.show()
-fig = plt.figure(figsize=(2,1.6), dpi=400)
+fig = plt.figure(figsize=(2, 1.6), dpi=400)
 plt.axis('off')
 plt.legend(handles, labels)
 plt.savefig(os.path.join(os.getcwd(), 'plots', 'std_u_Svar_legend.png'))
@@ -351,10 +393,8 @@ plt.show()
 # Remove the direction, to be extra certain that the NN doesn't "cheat"
 # X_data = np.delete(X_data, 1, axis=1) # NOT WORKING FOR THE BEAUTIFUL PLOTS THAT WILL REQUIRE THESE VALUES
 
-# Separating training and testing data
-n_samples = X_data.shape[0]
-start_idxs_of_each_anem_2 = np.array(start_idxs_of_each_anem.tolist() + [n_samples])  # this one includes the final index as well
-anem_to_test = 'synn_A'
+
+anem_to_test = 'svar_A'
 anem_start_idx = start_idxs_of_each_anem_2[np.where(mast_anem_list == anem_to_test)[0]][0]
 anem_end_idx = start_idxs_of_each_anem_2[np.where(mast_anem_list == anem_to_test)[0]+1][0]
 test_idxs = np.where((anem_start_idx <= np.arange(n_samples)) & (np.arange(n_samples) < anem_end_idx))[0]
@@ -370,7 +410,45 @@ batch_size_desired = 4000
 batch_size = min(batch_size_possibilities, key=lambda x:abs(x-batch_size_desired))
 
 # Getting values to predict and predicted values
-hp = {'lr':1E-1, 'batch_size':batch_size, 'weight_decay':1E-4, 'momentum':0.9, 'n_epochs':35, 'n_hid_layers':2}
+hp = {'lr':1E-1, 'batch_size':batch_size, 'weight_decay':0, 'momentum':0, 'n_epochs':35,
+      'n_hid_layers':1, 'activation':torch.nn.LeakyReLU, 'loss':MSELoss()}
 y_pred = train_and_test_NN(X_train, y_train, X_test, y_test, hp=hp, print_loss_per_epoch=True)
+
+# De-normalizing
+dir_test = X_test[:,1].cpu().numpy() * X_maxs[1]
+std_u_test  = np.squeeze(y_test.cpu().numpy()) * y_max
+std_u_pred = np.squeeze(y_pred.cpu().numpy()) * y_max
+
+# Plotting beautiful plots
+# fig = plt.figure(figsize=(8,6), dpi=400)
+# ax = fig.add_subplot(projection='polar')
+# plt.title(f'Anemometer "{anem_to_test}" (Z = 48 m)\n')
+# ax.set_theta_zero_location("N")
+# ax.set_theta_direction(-1)
+# ax.scatter( np.deg2rad(dir_test) , std_u_test , s=0.1, alpha=0.3, c='skyblue', marker='.', label='Testing data')
+# ax.scatter( np.deg2rad(dir_test) , std_u_pred , s=0.1, alpha=0.3, c='yellow', marker='x', label='Predictions')
+# # ax.errorbar(np.deg2rad(dir_test), std_u_means_train_per_sector_svar, std_u_std_train_per_sector_svar, c='forestgreen', elinewidth=3, alpha=0.9, fmt='.', label='$\sigma(train)$')
+# # ax.errorbar(np.deg2rad(dir_means_test_per_sector_svar) , std_u_means_test_per_sector_svar , std_u_std_test_per_sector_svar , c='dodgerblue', elinewidth=4, alpha=0.8, fmt='o', label='$\sigma(test)$')
+# # ax.errorbar(np.deg2rad(dir_means_test_per_sector_svar) , std_u_means_pred_per_sector_svar , std_u_std_pred_per_sector_svar , c='orange', elinewidth=2, alpha=0.9, fmt='.', label='Prediction', zorder=5)
+# handles, labels = ax.get_legend_handles_labels()
+# plt.ylim((None,4))
+# ax.text(np.deg2rad(18), 4.4, '$\sigma(u)\/[m/s]$')
+# plt.savefig(os.path.join(os.getcwd(), 'plots', 'std_u_Svar.png'))
+# plt.show()
+# fig = plt.figure(figsize=(2, 1.6), dpi=400)
+# plt.axis('off')
+# plt.legend(handles, labels)
+# plt.savefig(os.path.join(os.getcwd(), 'plots', 'std_u_Svar_legend.png'))
+# plt.show()
+
+
+
+density_scatter( x=np.deg2rad(dir_test) , y=std_u_test, ax = None, sort = True, bins = 50)
+plt.ylim([None, 4])
+plt.show()
+
+density_scatter( x=np.deg2rad(dir_test) , y=std_u_pred, ax = None, sort = True, bins = 50)
+plt.ylim([None, 4])
+plt.show()
 
 
