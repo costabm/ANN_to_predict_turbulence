@@ -7,6 +7,8 @@ import matplotlib.pyplot as plt
 from matplotlib import cm
 from matplotlib.colors import Normalize
 from scipy.interpolate import interpn
+from scipy import stats
+from scipy.optimize import curve_fit
 import bisect
 import torch
 from torch import Tensor
@@ -255,14 +257,14 @@ def train_and_test_NN(X_train, y_train, X_test, y_test, hp, print_loss_per_epoch
 
 ##################################################################
 # Getting the data for first time
-X_data_nonnorm, y_data_nonnorm, mast_anem_list, start_idxs_of_each_anem = get_all_10_min_data_at_z_48m() ##  takes a few minutes...
+X_data_nonnorm, y_data_nonnorm, mast_anem_list, start_idxs_of_each_anem = get_all_10_min_data_at_z_48m(U_min=0) ##  takes a few minutes...
 ##################################################################
 # Saving data
-data_path = os.path.join(os.getcwd(), 'processed_data', 'X_y_ML_ready_data')
+data_path = os.path.join(os.getcwd(), 'processed_data', 'X_y_ML_ready_data_Umin_0')
 np.savez_compressed(data_path, X=X_data_nonnorm, y=y_data_nonnorm, m=mast_anem_list, i=start_idxs_of_each_anem)
 ##################################################################
 # Loading data already saved
-data_path = os.path.join(os.getcwd(), 'processed_data', 'X_y_ML_ready_data')
+data_path = os.path.join(os.getcwd(), 'processed_data', 'X_y_ML_ready_data_Umin_0')
 loaded_data = np.load(data_path + '.npz')
 X_data_nonnorm = loaded_data['X']
 y_data_nonnorm = loaded_data['y']
@@ -278,9 +280,9 @@ y_data = y_data_nonnorm/y_max
 ##################################################################
 
 ##################################################################################################################
-# Statistical analyses of the distribution of turbulence
+# Statistical analyses of the distribution of turbulence. Converting y_data (1 dimension) into y2_data (2 dimensions -> 2 Weibull params)
 ##################################################################################################################
-# Separating training and testing data. Plotting Data
+# Plotting data by anemometer
 n_samples = X_data.shape[0]
 start_idxs_of_each_anem_2 = np.array(start_idxs_of_each_anem.tolist() + [n_samples])  # this one includes the final index as well
 for anem_idx in range(6):
@@ -290,15 +292,43 @@ for anem_idx in range(6):
     plt.ylim([None, 4])
     plt.show()
 
+PDF_used = 'expweibull'  # 'weibull' or 'expweibull'
+y_PDF_data_nonnorm = np.empty((len(y_data_nonnorm), 4))  # 4 parameters in the exponentiated weibull distribution
+y_PDF_data_nonnorm[:] = np.nan
+for anem_idx in range(6):
+    anem_slice = slice(start_idxs_of_each_anem_2[anem_idx], start_idxs_of_each_anem_2[anem_idx + 1])
+    for d in range(360):
+        idxs_360dir = np.where(X_360dirs[anem_slice] == d)[0]
+        if len(idxs_360dir) > 5 :  # minimum number of datapoints, otherwise -> np.nan
+            if PDF_used == 'weibull':
+                params = stats.exponweib.fit(y_data_nonnorm[anem_slice][idxs_360dir], floc = 0, f0 = 1)
+            if PDF_used == 'expweibull':
+                params = stats.exponweib.fit(y_data_nonnorm[anem_slice][idxs_360dir])
+            y_PDF_data_nonnorm[anem_slice][idxs_360dir] = params
+        # OLD VERSION USING curve_fit and my own weibull function. It didn't work properly
+        # n_bins = 100
+        # hist = np.histogram(y_data_nonnorm[idxs_360dir], bins=n_bins, density=True)
+        # hist_x = [(a+b)/2 for a,b in zip(hist[1][:-1], hist[1][1:])]
+        # hist_y = hist[0]
+        # try:
+        #     popt, pcov = curve_fit(weibull_PDF, hist_x, hist_y)  # param. optimal values, param estimated covariance
+        # except:
+        #     print(f'exception at anem {anem_idx} for dir {d}')
+        #     popt, pcov = curve_fit(weibull_PDF, hist_x, hist_y, bounds=(1E-5, 10))
+y_PDFmaxs = np.max(X_data_nonnorm, axis=0)
+y_PDF_data = y_PDF_data_nonnorm)
 
-
-
-# todo: work on this
-idxs_360dir = np.where(X_360dirs[anem_slice] == d)[0]
-hist = np.histogram(y_data_nonnorm[idxs_360dir], bins=10, density=True)
-hist_x, hist_y = hist
-plt.hist(y_data_nonnorm[idxs_360dir], bins=30)
+weibull_x = np.linspace(0, 3, 100)
+plt.plot(weibull_x, weibull_PDF(weibull_x, *popt), label='my_func')
+plt.plot(weibull_x, weibull_PDF(weibull_x, *popt2), label='weibfit')
+plt.plot(weibull_x, stats.exponweib.pdf(weibull_x, *popt3), label='exponweibfit')
+stats.exponweib.pdf(weibull_x, a1, b1, loc1, scale1)
+plt.hist(y_data_nonnorm[idxs_360dir], bins=n_bins, density=True)
+plt.legend()
 plt.show()
+
+
+
 
 
 
@@ -327,7 +357,7 @@ batch_size_possibilities = sympy.divisors(n_samples_train)  # [1, 2, 4, 23, 46, 
 
 
 # Getting values to predict and predicted values
-hp = {'lr':1E-1, 'batch_size':3958, 'weight_decay':1E-4, 'momentum':0.9, 'n_epochs':25, 'n_hid_layers':1, 'activation':torch.nn.ReLU, 'loss':MSELoss()}
+hp = {'lr':1E-1, 'batch_size':6329, 'weight_decay':1E-4, 'momentum':0.9, 'n_epochs':25, 'n_hid_layers':1, 'activation':torch.nn.ReLU, 'loss':MSELoss()}
 y_pred = train_and_test_NN(X_train, y_train, X_test, y_test, hp=hp, print_loss_per_epoch=True)
 
 # Choosing only the results of a given anemometer (e.g. svar -> Svarvahelleholmen)
