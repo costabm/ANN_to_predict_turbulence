@@ -9,10 +9,12 @@ read_0p1sec_data_fun(masts_to_read=['synn','osp1','osp2','svar'], date_from_read
 -----------------------------------------------------------------------------------------
 To process the 10 Hz data into e.g. 1h or 10min data (window='01:00:00' or window='00:10:00', respectively), storing it as json files (one file per month), in the consistent coordinate system
 "to_North", "to_West", "to_Zenith", run e.g.:
-create_processed_data_files(date_start=datetime.datetime.strptime('2015-01-01 00:00:00.0', '%Y-%m-%d %H:%M:%S.%f'), n_months=12*6, window='01:00:00', save_in_folder='processed_data')
+create_processed_data_files(date_start=datetime.datetime.strptime('2015-01-01 00:00:00.0', '%Y-%m-%d %H:%M:%S.%f'), n_months=12 * 6, window='00:10:00', save_in_folder='processed_data_1', masts_to_read=['synn', 'osp1', 'osp2', 'svar'])
+create_processed_data_files(date_start=datetime.datetime.strptime('2015-01-01 00:00:00.0', '%Y-%m-%d %H:%M:%S.%f'), n_months=12 * 6, window='00:10:00', save_in_folder='processed_data_2',masts_to_read=['land','neso'])
 -----------------------------------------------------------------------------------------
 After having all the json files of the processed data, to compile them all into one file, run e.g.:
-compile_all_processed_data_into_1_file(data_str='01-00-00_stats', save_str='01-00-00_all_stats', save_json=True, foldername='processed_data')
+compile_all_processed_data_into_1_file(data_str='01-00-00_stats', save_str='01-00-00_all_stats', save_json=True, foldername='processed_data_1', masts_to_read=['synn', 'osp1', 'osp2', 'svar'])
+compile_all_processed_data_into_1_file(data_str='00-10-00_stats', save_str='00-10-00_all_stats', save_json=True, foldername='processed_data_2', masts_to_read=['land','neso'])
 """
 
 import numpy as np
@@ -342,7 +344,8 @@ def process_data_fun(window='01:00:00', masts_to_read=['synn', 'osp1', 'osp2', '
     return data_processed
 
 
-def create_processed_data_files(date_start=datetime.datetime.strptime('2015-01-01 00:00:00.0', '%Y-%m-%d %H:%M:%S.%f'), n_months=12 * 6, window='01:00:00', save_in_folder='processed_data'):
+def create_processed_data_files(date_start=datetime.datetime.strptime('2015-01-01 00:00:00.0', '%Y-%m-%d %H:%M:%S.%f'), n_months=12 * 6, window='01:00:00', save_in_folder='processed_data',
+                                masts_to_read=['synn', 'osp1', 'osp2', 'svar']):
     """
     Generates many processed data files, one month long each, given a start date and n_monts.
     Args:
@@ -355,13 +358,13 @@ def create_processed_data_files(date_start=datetime.datetime.strptime('2015-01-0
     for dt1, dt2 in zip(dates_list[:-1], dates_list[1:]):
         dt1_str = dt1.strftime('%Y-%m-%d %H:%M:%S.%f')[:-5]
         dt2_str = dt2.strftime('%Y-%m-%d %H:%M:%S.%f')[:-5]
-        process_data_fun(window=window, masts_to_read=['synn', 'osp1', 'osp2', 'svar'], date_from_read=dt1_str, date_to_read=dt2_str, save_json=True, save_in_folder=save_in_folder)
+        process_data_fun(window=window, masts_to_read=masts_to_read, date_from_read=dt1_str, date_to_read=dt2_str, save_json=True, save_in_folder=save_in_folder)
         print(f'Data is now processed, from {dt1_str} to {dt2_str}')
 
 
-def create_empty_nested_dictionary():
+def create_empty_nested_dictionary(masts_to_read):
     empty_dict = {}
-    for m in ['osp1', 'osp2', 'svar', 'synn']:
+    for m in masts_to_read:
         empty_dict[m] = {}
         for a in ['A', 'B', 'C']:
             empty_dict[m][a] = {}
@@ -375,7 +378,7 @@ def create_empty_nested_dictionary():
     return empty_dict
 
 
-def compile_all_processed_data_into_1_file(data_str='01-00-00_stats', save_str='01-00-00_all_stats', save_json=True, foldername='processed_data'):
+def compile_all_processed_data_into_1_file(data_str='01-00-00_stats', save_str='01-00-00_all_stats', save_json=True, foldername='processed_data', masts_to_read=['synn', 'osp1', 'osp2', 'svar']):
     """
     Merging all json files that include data_str in their name, into one single json file
     """
@@ -385,9 +388,9 @@ def compile_all_processed_data_into_1_file(data_str='01-00-00_stats', save_str='
         if data_str in f:
             with open(os.path.join(os.getcwd(), foldername, f), "r") as json_file:
                 all_1h_files.append(json.load(json_file))
-    pro_file = create_empty_nested_dictionary()
+    pro_file = create_empty_nested_dictionary(masts_to_read)
     for f in all_1h_files:
-        for m in ['osp1', 'osp2', 'svar', 'synn']:
+        for m in masts_to_read:
             for a in ['A','B','C']:
                 for x in ['ts', 'means', 'covar', 'availability']:
                     if f[m][a][x]:  # if there is data
@@ -399,5 +402,4 @@ def compile_all_processed_data_into_1_file(data_str='01-00-00_stats', save_str='
     if save_json:
         save_processed_data(processed_data=pro_file, foldername=foldername, fname=save_str)
     return pro_file
-
 

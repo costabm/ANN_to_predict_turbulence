@@ -130,7 +130,7 @@ def compile_storm_data_files(save_str='00-10-00_all_storms'):
     compile_all_processed_data_into_1_file(data_str='storm_', save_str='00-10-00_all_storms', save_json=True, foldername='processed_storm_data')
 
 
-def organized_dataframes_of_storms(foldername='processed_storm_data', compiled_fname='00-10-00_all_storms'):
+def organized_dataframes_of_storms(foldername='processed_storm_data', compiled_fname='00-10-00_all_storms', mast_list=['osp1', 'osp2', 'svar', 'synn']):
     """
     Returns: Nicely organized dataframes: one for mean wind speeds, one for directions, one for each turbulence intensity, one for the data availability
     """
@@ -142,7 +142,7 @@ def organized_dataframes_of_storms(foldername='processed_storm_data', compiled_f
     storm_df_all_Iv = pd.DataFrame(columns=['ts'])  # turbulence intensities
     storm_df_all_Iw = pd.DataFrame(columns=['ts'])  # turbulence intensities
     storm_df_all_avail = pd.DataFrame(columns=['ts'])
-    for mast in ['osp1', 'osp2', 'svar', 'synn']:
+    for mast in mast_list:
         for anem in ['A', 'B', 'C']:
             # Means
             storm_df_means = pd.DataFrame()
@@ -196,5 +196,25 @@ def plot_storm_ws_per_anem(dict_storms_concomit_wind_missing):
             # plt.plot(pd.to_datetime(pro_data['osp1']['A']['ts']), U_Lw[2], label='w')
             plt.xlim(pd.DatetimeIndex(['2015-02-01 00:00:00', '2020-05-01 00:00:00']))
             plt.show()
+
+
+def merge_two_all_stats_files():
+    """
+    Merges the data that was separately collected from ['osp1', 'osp2', 'svar', 'synn'] and ['land','neso'], and already stored into e.g. '00-10-00_all_stats' files.
+    """
+    df_all_means_1, df_all_dirs_1, df_all_Iu_1,\
+    df_all_Iv_1, df_all_Iw_1, df_all_avail_1 = organized_dataframes_of_storms(foldername='processed_data_1'  , compiled_fname='00-10-00_all_stats', mast_list=['osp1', 'osp2', 'svar', 'synn'])
+    df_all_means_2, df_all_dirs_2, df_all_Iu_2,\
+    df_all_Iv_2, df_all_Iw_2, df_all_avail_2 = organized_dataframes_of_storms(foldername='processed_data_2', compiled_fname='00-10-00_all_stats', mast_list=['land','neso'])
+    df_all_means = pd.merge(df_all_means_1, df_all_means_2, on='ts', how='outer', sort=True)
+    df_all_dirs = pd.merge(df_all_dirs_1, df_all_dirs_2, on='ts', how='outer', sort=True)
+    df_all_Iu = pd.merge(df_all_Iu_1, df_all_Iu_2, on='ts', how='outer', sort=True)
+    df_all_Iv = pd.merge(df_all_Iv_1, df_all_Iv_2, on='ts', how='outer', sort=True)
+    df_all_Iw = pd.merge(df_all_Iw_1, df_all_Iw_2, on='ts', how='outer', sort=True)
+    df_all_avail = pd.merge(df_all_avail_1, df_all_avail_2, on='ts', how='outer', sort=True)
+    return df_all_means, df_all_dirs, df_all_Iu, df_all_Iv, df_all_Iw, df_all_avail
+
+
+
 
 

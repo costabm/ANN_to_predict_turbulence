@@ -75,4 +75,9 @@ def plot_elevation_profile(point_1, point_2, step_distance, list_of_distances):
     plt.ylabel('Northing [m]')
     plt.show()
 
-# plot_elevation_profile(point_1=[-35260., 6700201.], point_2=[-34501., 6690211.], step_distance=10)
+
+# TRASH
+# plot_elevation_profile(point_1=[-35260., 6700201.], point_2=[-34501., 6690211.], step_distance=10, list_of_distances=None)
+
+
+

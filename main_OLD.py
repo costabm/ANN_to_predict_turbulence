@@ -54,6 +54,71 @@ def density_scatter(x , y, ax = None, sort = True, bins = 20, **kwargs )   :
     return ax, np.min(z), np.max(z)
 
 
+# create_processed_data_files(date_start=datetime.datetime.strptime('2018-01-01 00:00:00.0', '%Y-%m-%d %H:%M:%S.%f'), n_months=12*6, window='00:10:00', save_in_folder='processed_data')
+# compile_all_processed_data_into_1_file(data_str='01-00-00_stats', save_str='01-00-00_all_stats', save_json=True, foldername='processed_data')
+# create_storm_data_files(window='00:10:00', input_fname='01-00-00_all_stats')
+# compile_storm_data_files(save_str='00-10-00_all_storms')
+
+# # Getting post-processed and organized storm data
+# storm_df_all_means, storm_df_all_dirs, storm_df_all_Iu, storm_df_all_Iv, storm_df_all_Iw, storm_df_all_avail = organized_dataframes_of_storms(foldername='processed_storm_data', compiled_fname='00-10-00_all_storms')
+#
+# # Plotting U, Iu and sigma_U along the fjord from measurements nearby (at different heights!):
+# delta_dir = 30
+# dir_separators = np.arange(0,360.001, delta_dir)
+# for dir_min, dir_max in zip(dir_separators[:-1], dir_separators[1:]):
+#     print(dir_min, dir_max)
+#     idxs_where_storm = (dir_min < storm_df_all_dirs.mean(axis=1)) & (storm_df_all_dirs.mean(axis=1) < dir_max)
+#     storm_means = storm_df_all_means[idxs_where_storm]
+#     storm_Iu = storm_df_all_Iu[idxs_where_storm]
+#     x_pos = [0, 2400, 2600, 5000]  # todo: improve this..
+#     x_labels = ['synn_C', 'osp1_C', 'osp2_C', 'svar_C']
+#     plt.figure(figsize=(5,10))
+#     plt.title(f'Dir between {dir_min} and {dir_max}')
+#     plt.errorbar(x_pos, y=storm_Iu.mean()[x_labels], yerr=storm_Iu.std()[x_labels], color='blue', label='Iu')
+#     plt.errorbar(x_pos, y=storm_means.mean()[x_labels] / 20, yerr=storm_means.std()[x_labels] / 20, color='orange', label='U / 20')
+#     plt.errorbar(x_pos, y=(storm_Iu[x_labels] * storm_means[x_labels]).mean(), yerr=(storm_Iu[x_labels] * storm_means[x_labels]).std()[x_labels] / 20, color='green', label='sigmaU')
+#     plt.ylim(bottom=0)
+#     plt.legend()
+#     plt.show()
+#
+#
+# # Obtaining wind profile at each mast:
+#
+#
+# # Checking variability in the std_u, for different U and different dir
+# U_min = 12
+# U_max = 15
+# delta_dir = 20
+# dir_separators = np.arange(0, 360.001, delta_dir)
+# mast_list = ['synn', 'osp1', 'osp2', 'svar']
+# anem_list = ['A', 'B', 'C']
+# for mast in mast_list:
+#     plt.figure(figsize=(3.7, 3.7), dpi=800)
+#     ax = plt.subplot(111, projection='polar')
+#     ax.set_title(mast)
+#     ax.set_theta_zero_location("N")
+#     ax.set_theta_direction(-1)
+#     for anem in anem_list:
+#         mast_anem = mast + '_' + anem
+#         dir_centre = []
+#         Iu_mean = []
+#         Iu_std = []
+#         u_std_mean = []
+#         u_std_std = []
+#         for dir_min, dir_max in zip(dir_separators[:-1], dir_separators[1:]):
+#             dir_centre.append((dir_max + dir_min)/2)
+#             idxs_where_cond = (dir_min <= storm_df_all_dirs[mast_anem]) & (storm_df_all_dirs[mast_anem] <= dir_max) & (U_min <= storm_df_all_means[mast_anem]) & (storm_df_all_means[mast_anem] <= U_max)
+#             Iu_mean.append(storm_df_all_Iu[mast_anem][idxs_where_cond].mean())
+#             Iu_std.append(storm_df_all_Iu[mast_anem][idxs_where_cond].std())
+#             u_std = (storm_df_all_Iu[mast_anem][idxs_where_cond]).multiply(storm_df_all_means[mast_anem][idxs_where_cond])
+#             u_std_mean.append(u_std.mean())
+#             u_std_std.append(u_std.std())
+#         # ax.errorbar(np.deg2rad(dir_centre), Iu_mean, yerr=Iu_std)
+#         ax.errorbar(np.deg2rad(dir_centre), u_std_mean, yerr=u_std_std, label=anem)
+#     plt.legend()
+#     plt.show()
+
+
 def test_elevation_profile_at_given_point_dir_dist(point_1=[-34625., 6700051.], direction_deg=160, step_distance=False, total_distance=False,
                                                    list_of_distances=[i*(5.+5.*i) for i in range(45)], plot=True):
     point_2 = get_point2_from_point1_dir_and_dist(point_1=point_1, direction_deg=direction_deg, distance=list_of_distances[-1] if list_of_distances else total_distance)
@@ -61,6 +126,8 @@ def test_elevation_profile_at_given_point_dir_dist(point_1=[-34625., 6700051.], 
     if plot:
         plot_elevation_profile(point_1=point_1, point_2=point_2, step_distance=step_distance, list_of_distances=list_of_distances)
     return dists, heights
+# test_elevation_profile_at_given_point_dir_dist(point_1=[-34625., 6700051.], direction_deg=180,step_distance=False,total_distance=False, list_of_distances=[i*(5.+5.*i) for i in range(45)],plot=True)
+# test_elevation_profile_at_given_point_dir_dist(point_1=[-34625., 6700051.], direction_deg=180, step_distance=10., total_distance=9900., list_of_distances=False, plot=True)
 
 
 def convert_angle_to_0_2pi_interval(angle, input_and_output_in_degrees=True):
@@ -418,9 +485,159 @@ def train_and_test_NN(X_train, y_train, X_test, y_test, hp, print_loss_per_epoch
 ##################################################################################################################
 
 
-##################################################################################################################
-# TRAINING FROM CERTAIN ANEMOMETERS AND TESTING AT 1 GIVEN ANEMOMETER
 
+
+#
+# ##################################################################################################################
+# # STD_u - TRAINING FROM 18 ALTERNATE-10-DEG-WIDE-WIND-SECTORS AND TESTING THE REMAINING 18 SECTORS, AT EACH ANEMOMETER
+# ##################################################################################################################
+#
+# # Remove the direction, to be extra certain that the NN doesn't "cheat"
+# # X_data = np.delete(X_data, 1, axis=1) # NOT WORKING FOR THE BEAUTIFUL PLOTS THAT WILL REQUIRE THESE VALUES
+#
+# # Separating training and testing data
+# train_angle_domain = [[x, x+22.5] for x in np.arange(0, 360, 45)]  # in degrees
+# test_angle_domain  = [[x+22.5, x+45] for x in np.arange(0, 360, 45)]  # in degrees
+# train_bools = np.logical_or.reduce([(a[0]<X_data_nonnorm[:,1]) & (X_data_nonnorm[:,1]<a[1]) for a in train_angle_domain])  # https://stackoverflow.com/questions/20528328/numpy-logical-or-for-more-than-two-arguments
+# test_bools =  np.logical_or.reduce([(a[0]<X_data_nonnorm[:,1]) & (X_data_nonnorm[:,1]<a[1]) for a in test_angle_domain])
+# X_train = Tensor(X_data[train_bools]).to(device)
+# y_train = Tensor(y_data[train_bools]).to(device)
+# X_test =  Tensor(X_data[test_bools]).to(device)
+# y_test =  Tensor(y_data[test_bools]).to(device)
+#
+# n_samples_train = X_train.shape[0]
+# batch_size_possibilities = sympy.divisors(n_samples_train)  # [1, 2, 4, 23, 46, 92, 4051, 8102, 16204, 93173, 186346, 372692]
+#
+# # Getting values to predict and predicted values
+# hp = {'lr':1E-1, 'batch_size':6329, 'weight_decay':1E-4, 'momentum':0.9, 'n_epochs':25, 'n_hid_layers':1, 'activation':torch.nn.ReLU, 'loss':MSELoss()}
+# y_pred = train_and_test_NN(X_train, y_train, X_test, y_test, hp=hp, print_loss_per_epoch=True)
+#
+# # Choosing only the results of a given anemometer (e.g. svar -> Svarvahelleholmen)
+# anem_train = np.searchsorted(start_idxs_of_each_anem, np.where(train_bools)[0], side='right') - 1  # to which anemometer, (indexed from all_anem_list), does each test sample belong to
+# anem_test =  np.searchsorted(start_idxs_of_each_anem, np.where(test_bools )[0], side='right') - 1
+# train_idxs_svar = np.where(anem_train == np.where(all_anem_list == 'svar_A')[0])[0]
+# test_idxs_svar  = np.where(anem_test  == np.where(all_anem_list == 'svar_A')[0])[0]
+# X_train_svar = X_train[train_idxs_svar].cpu().numpy()
+# y_train_svar = np.squeeze(y_train[train_idxs_svar].cpu().numpy())  # simply converting to numpy and removing the empty dimension of the shape (n_train_samples,1)
+# X_test_svar = X_test[test_idxs_svar].cpu().numpy()
+# y_test_svar = np.squeeze(y_test[test_idxs_svar].cpu().numpy())  # simply converting to numpy and removing the empty dimension of the shape (n_test_samples,1)
+# y_pred_svar = np.squeeze(y_pred[test_idxs_svar].cpu().numpy())  # simply converting to numpy and removing the empty dimension of the shape (n_test_samples,1)
+#
+# # De-normalizing
+# dir_train_svar = X_train_svar[:,1] * X_maxs[1]
+# dir_test_svar = X_test_svar[:,1] * X_maxs[1]
+# std_u_train_svar = y_train_svar * y_max
+# std_u_test_svar  = y_test_svar * y_max
+# std_u_pred_svar = y_pred_svar * y_max
+#
+# # Organizing the results into sectors
+# train_sector_bools = [(a[0]<dir_train_svar) & (dir_train_svar<a[1]) for a in train_angle_domain]
+# test_sector_bools  = [(a[0]<dir_test_svar)  & (dir_test_svar<a[1])  for a in test_angle_domain]
+# train_sector_idxs = [np.where(train_sector_bools[i])[0] for i in range(len(train_sector_bools))]
+# test_sector_idxs  = [np.where(test_sector_bools[i] )[0] for i in range(len(test_sector_bools ))]
+# dir_means_train_per_sector_svar =   np.array([np.mean(dir_train_svar[l]) for l in train_sector_idxs])
+# dir_means_test_per_sector_svar  =   np.array([np.mean(dir_test_svar[l] ) for l in test_sector_idxs ])
+# std_u_means_train_per_sector_svar = np.array([np.mean(std_u_train_svar[l]) for l in train_sector_idxs])
+# std_u_means_test_per_sector_svar  = np.array([np.mean(std_u_test_svar[l]) for l in test_sector_idxs])
+# std_u_means_pred_per_sector_svar = np.array([np.mean(std_u_pred_svar[l]) for l in test_sector_idxs])
+# std_u_std_train_per_sector_svar = np.array([np.std(std_u_train_svar[l]) for l in train_sector_idxs])
+# std_u_std_test_per_sector_svar  = np.array([np.std(std_u_test_svar[l] ) for l in test_sector_idxs ])
+# std_u_std_pred_per_sector_svar =   np.array([np.std( std_u_pred_svar[l]) for l in test_sector_idxs])
+#
+# # Plotting beautiful plots
+# fig = plt.figure(figsize=(8,6), dpi=400)
+# ax = fig.add_subplot(projection='polar')
+# plt.title('Anemometer at Svarvahelleholmen (Z = 48 m)\n')
+# ax.set_theta_zero_location("N")
+# ax.set_theta_direction(-1)
+# ax.scatter( np.deg2rad(dir_train_svar), std_u_train_svar, s=1, alpha=0.6, c='lightgreen', label='Training data')
+# ax.scatter( np.deg2rad(dir_test_svar) , std_u_test_svar , s=1, alpha=0.6, c='skyblue', label='Testing data')
+# ax.errorbar(np.deg2rad(dir_means_train_per_sector_svar), std_u_means_train_per_sector_svar, std_u_std_train_per_sector_svar, c='forestgreen', elinewidth=3, alpha=0.9, fmt='.', label='$\sigma(train)$')
+# ax.errorbar(np.deg2rad(dir_means_test_per_sector_svar) , std_u_means_test_per_sector_svar , std_u_std_test_per_sector_svar , c='dodgerblue', elinewidth=4, alpha=0.8, fmt='o', label='$\sigma(test)$')
+# ax.errorbar(np.deg2rad(dir_means_test_per_sector_svar) , std_u_means_pred_per_sector_svar , std_u_std_pred_per_sector_svar , c='orange', elinewidth=2, alpha=0.9, fmt='.', label='Prediction', zorder=5)
+# handles, labels = ax.get_legend_handles_labels()
+# plt.ylim((None,4))
+# ax.text(np.deg2rad(18), 4.4, '$\sigma(u)\/[m/s]$')
+# plt.savefig(os.path.join(os.getcwd(), 'plots', 'std_u_Svar.png'))
+# plt.show()
+# fig = plt.figure(figsize=(2, 1.6), dpi=400)
+# plt.axis('off')
+# plt.legend(handles, labels)
+# plt.savefig(os.path.join(os.getcwd(), 'plots', 'std_u_Svar_legend.png'))
+# plt.show()
+
+#
+# ##################################################################################################################
+# # STD_u - TRAINING FROM 5 ANEMOMETERS AND TESTING REMAINING 1 ANEMOMETER AT SYNNOYTANGEN
+# ##################################################################################################################
+#
+# # Remove the direction, to be extra certain that the NN doesn't "cheat"
+# # X_data = np.delete(X_data, 1, axis=1) # NOT WORKING FOR THE BEAUTIFUL PLOTS THAT WILL REQUIRE THESE VALUES
+#
+# anem_to_test = 'svar_A'
+# anem_start_idx = start_idxs_of_each_anem_2[np.where(all_anem_list == anem_to_test)[0]][0]
+# anem_end_idx = start_idxs_of_each_anem_2[np.where(all_anem_list == anem_to_test)[0]+1][0]
+# test_idxs = np.where((anem_start_idx <= np.arange(n_samples)) & (np.arange(n_samples) < anem_end_idx))[0]
+# train_idxs = np.array(list(set(np.arange(n_samples)) - set(test_idxs)))
+# X_train = Tensor(X_data[train_idxs]).to(device)
+# y_train = Tensor(y_data[train_idxs]).to(device)
+# X_test =  Tensor(X_data[test_idxs]).to(device)
+# y_test =  Tensor(y_data[test_idxs]).to(device)
+#
+#
+# n_samples_train = X_train.shape[0]
+# batch_size_possibilities = np.array(sympy.divisors(n_samples_train))  # [1, 2, 4, 23, 46, 92, 4051, 8102, 16204, 93173, 186346, 372692]
+# batch_size_desired = 4000
+# batch_size = min(batch_size_possibilities, key=lambda x:abs(x-batch_size_desired))
+# assert batch_size > 1000, "Warning ! Batch size too small can be extremely slow"
+#
+# # Getting values to predict and predicted values
+# hp = {'lr':1E-1, 'batch_size':batch_size, 'weight_decay':0, 'momentum':0, 'n_epochs':35,
+#       'n_hid_layers':1, 'activation':torch.nn.LeakyReLU, 'loss':MSELoss()}
+# y_pred = train_and_test_NN(X_train, y_train, X_test, y_test, hp=hp, print_loss_per_epoch=True)
+#
+# # De-normalizing
+# dir_test = X_test[:,1].cpu().numpy() * X_maxs[1]
+# std_u_test  = np.squeeze(y_test.cpu().numpy()) * y_max
+# std_u_pred = np.squeeze(y_pred.cpu().numpy()) * y_max
+#
+# # Plotting beautiful plots
+# # fig = plt.figure(figsize=(8,6), dpi=400)
+# # ax = fig.add_subplot(projection='polar')
+# # plt.title(f'Anemometer "{anem_to_test}" (Z = 48 m)\n')
+# # ax.set_theta_zero_location("N")
+# # ax.set_theta_direction(-1)
+# # ax.scatter( np.deg2rad(dir_test) , std_u_test , s=0.1, alpha=0.3, c='skyblue', marker='.', label='Testing data')
+# # ax.scatter( np.deg2rad(dir_test) , std_u_pred , s=0.1, alpha=0.3, c='yellow', marker='x', label='Predictions')
+# # # ax.errorbar(np.deg2rad(dir_test), std_u_means_train_per_sector_svar, std_u_std_train_per_sector_svar, c='forestgreen', elinewidth=3, alpha=0.9, fmt='.', label='$\sigma(train)$')
+# # # ax.errorbar(np.deg2rad(dir_means_test_per_sector_svar) , std_u_means_test_per_sector_svar , std_u_std_test_per_sector_svar , c='dodgerblue', elinewidth=4, alpha=0.8, fmt='o', label='$\sigma(test)$')
+# # # ax.errorbar(np.deg2rad(dir_means_test_per_sector_svar) , std_u_means_pred_per_sector_svar , std_u_std_pred_per_sector_svar , c='orange', elinewidth=2, alpha=0.9, fmt='.', label='Prediction', zorder=5)
+# # handles, labels = ax.get_legend_handles_labels()
+# # plt.ylim((None,4))
+# # ax.text(np.deg2rad(18), 4.4, '$\sigma(u)\/[m/s]$')
+# # plt.savefig(os.path.join(os.getcwd(), 'plots', 'std_u_Svar.png'))
+# # plt.show()
+# # fig = plt.figure(figsize=(2, 1.6), dpi=400)
+# # plt.axis('off')
+# # plt.legend(handles, labels)
+# # plt.savefig(os.path.join(os.getcwd(), 'plots', 'std_u_Svar_legend.png'))
+# # plt.show()
+#
+#
+#
+# density_scatter( x=np.deg2rad(dir_test) , y=std_u_test, ax = None, sort = True, bins = 50)
+# plt.ylim([None, 4])
+# plt.show()
+#
+# density_scatter( x=np.deg2rad(dir_test) , y=std_u_pred, ax = None, sort = True, bins = 50)
+# plt.ylim([None, 4])
+# plt.show()
+#
+#
+
+##################################################################################################################
+# WEIBULL PARAMS - TRAINING FROM CERTAIN ANEMOMETERS AND TESTING AT 1 GIVEN ANEMOMETER
+##################################################################################################################
 
 def get_idxs_from_anems(anem_list, n_samples, all_anem_list):
     """
@@ -526,17 +743,6 @@ my_NN_cases = [{'anem_to_train': ['svar_A'],
                 'anem_to_test': ['svar_A']}]
 
 
-
-test_X_data = np.array([np.arange(1000000), np.arange(1000000), np.arange(1000000)]).T/10000000
-test_y_data = (np.arange(1000000).T/1000000)[:,None]
-
-find_optimal_hp_for_each_of_my_cases(my_NN_cases, X_data=test_X_data, y_data=test_y_data, n_trials=50)
-
-
-
-
-
-
 X_data_backup = copy.deepcopy(X_data)
 
 X_data = copy.deepcopy(X_data_backup)
@@ -548,7 +754,6 @@ X_data = np.delete(X_data, np.arange(2,91), axis=1) # NOT WORKING FOR THE BEAUTI
 
 # X_data = np.random.uniform(0,1,size=X_data_backup.shape)
 hp_opt_results_w_dir = find_optimal_hp_for_each_of_my_cases(my_NN_cases, X_data=X_data, y_data=y_data[:,None], n_trials=100)
-
 
 for case_idx in range(len(my_NN_cases)):
     # case_idx = 0
@@ -578,7 +783,9 @@ for case_idx in range(len(my_NN_cases)):
 
 # REMOVING MEANS AND DIRECTIONS FROM THE INPUT DATA
 X_data = np.delete(X_data, [0,1], axis=1) # NOT WORKING FOR THE BEAUTIFUL PLOTS THAT WILL REQUIRE THESE VALUES
-hp_opt_results_w_dir  = find_optimal_hp_for_each_of_my_cases(my_NN_cases, X_data=X_data, y_data=y_PDF_data, n_trials=50)
+hp_opt_results_w_dir  = find_optimal_hp_for_each_of_my_cases(my_NN_cases, X_data=X_data, y_data=y_PDF_data, n_trials=100)
+
+
 
 
 
@@ -597,14 +804,6 @@ y_pred_nonnorm = np.squeeze(y_pred.cpu().numpy()) * y_PDF_maxs
 
 # From PREDICTED Weibull to PREDICTED data
 y_pred_samples = stats.exponweib.rvs(1, y_pred_nonnorm[:,0], 0, y_pred_nonnorm[:,1], size=len(y_pred_nonnorm))
-
-
-
-
-
-
-
-
 
 
 # Plotting PREDICTED data by anemometer
