@@ -82,24 +82,41 @@ def get_heights_from_X_dirs_and_dists(point_1, array_of_dirs, cone_angles, dists
 def get_all_10_min_data_at_z_48m(U_min = 0, windward_dists=[i*(5.+5.*i) for i in range(45)], leeward_dists=[i*(10.+10.*i) for i in range(10)], side_dists=[i*(10.+10.*i) for i in range(10)]):
     print('Collecting all 10-min wind data... (takes 10-60 minutes)')
     min10_df_all_means, min10_df_all_dirs, min10_df_all_Iu, min10_df_all_Iv, min10_df_all_Iw, min10_df_all_avail = merge_two_all_stats_files()
+    assert min10_df_all_means['ts'].equals(min10_df_all_dirs['ts'])
+    assert min10_df_all_dirs['ts'].equals(min10_df_all_Iu['ts'])
+    assert min10_df_all_Iu['ts'].equals(min10_df_all_Iv['ts'])
+    assert min10_df_all_Iv['ts'].equals(min10_df_all_Iw['ts'])
+    assert min10_df_all_Iw['ts'].equals(min10_df_all_avail['ts'])
+    ts_df = min10_df_all_means['ts']
     columns_to_drop = ['ts', 'osp1_C', 'osp2_C', 'svar_B','svar_C','synn_B','synn_C','land_B','land_C','neso_B','neso_C']  # Discarding all data that are not at Z=48m
     X_means_df = min10_df_all_means.drop(columns=columns_to_drop)
     X_dirs_df =  min10_df_all_dirs.drop(columns=columns_to_drop)
     X_Iu_df = min10_df_all_Iu.drop(columns=columns_to_drop)
     idxs_where_cond = (U_min <= X_means_df)  # Discarding all data with U below U_min
-    X_means_df = X_means_df[idxs_where_cond].dropna(axis=0, how='all')
-    X_dirs_df  = X_dirs_df[idxs_where_cond].dropna(axis=0, how='all')
-    X_Iu_df    = X_Iu_df[idxs_where_cond].dropna(axis=0, how='all')
+    X_means_df = X_means_df[idxs_where_cond]  # convert to nan each entry associated with U < U_min
+    X_dirs_df  = X_dirs_df[idxs_where_cond]  # convert to nan each entry associated with U < U_min
+    X_Iu_df    = X_Iu_df[idxs_where_cond]  # convert to nan each entry associated with U < U_min
+    idxs_where_drop_1 = X_means_df.isna().all(axis=1).to_numpy()  # idxs to drop, where all columns are nan
+    idxs_where_drop_2 = X_dirs_df.isna().all(axis=1).to_numpy()  # idxs to drop, where all columns are nan
+    idxs_where_drop_3 = X_Iu_df.isna().all(axis=1).to_numpy()  # idxs to drop, where all columns are nan
+    idxs_where_drop_all = np.where(np.logical_or.reduce((idxs_where_drop_1, idxs_where_drop_2, idxs_where_drop_3)))[0]
+    ts_df = ts_df.drop(idxs_where_drop_all)  # droping rows where all columns are nan
+    X_means_df = X_means_df.drop(idxs_where_drop_all)  # droping rows where all columns are nan
+    X_dirs_df = X_dirs_df.drop(idxs_where_drop_all)  # droping rows where all columns are nan
+    X_Iu_df = X_Iu_df.drop(idxs_where_drop_all)  # droping rows where all columns are nan
     X_std_u_df = X_Iu_df.multiply(X_means_df)
     all_anem_list = ['osp1_A', 'osp1_B', 'osp2_A', 'osp2_B', 'svar_A', 'synn_A', 'land_A', 'neso_A']
     # Organizing the data into an input matrix (with shape shape (n_samples, n_features)):
     X_data = []
     y_data = []
+    ts_data = []
+    other_data = []
     data_len_of_each_anem = []
     mast_UTM_33 = {'synn':[-34515., 6705758.], 'osp1':[-39375., 6703464.], 'osp2':[-39350., 6703204.], 'svar':[-34625., 6700051.], 'land':[-35446., 6688200.], 'neso':[-30532., 6682896.]}
     for mast_anem in all_anem_list:
         # We allow different data lengths for each anemometer, but a row with at least one nan is removed from a given anemometer df of 'means' 'dirs' and 'stds'
-        X_mean_dir_std_anem = pd.DataFrame({'means': X_means_df[mast_anem], 'dirs': X_dirs_df[mast_anem], 'stds': X_std_u_df[mast_anem]}).dropna(axis=0, how='any')
+        X_mean_dir_std_anem = pd.DataFrame({'ts': ts_df,'means': X_means_df[mast_anem], 'dirs': X_dirs_df[mast_anem], 'stds': X_std_u_df[mast_anem]}).dropna(axis=0, how='any')
+        ts_anem = X_mean_dir_std_anem['ts']
         X_mean_anem =  np.array(X_mean_dir_std_anem['means'])
         X_dir_anem =   np.array(X_mean_dir_std_anem['dirs'])
         X_std_u_anem = np.array(X_mean_dir_std_anem['stds'])
@@ -115,30 +132,33 @@ def get_all_10_min_data_at_z_48m(U_min = 0, windward_dists=[i*(5.+5.*i) for i in
                                                                                 ,np.mean(leeward_heights,axis=0),  np.std(leeward_heights,axis=0)[:,1:]
                                                                                 ,np.mean(side_heights,axis=0)    , np.std(side_heights,axis=0)[:,1:]
                                                                                 ,), axis=1)  # [1:,:] because point_1 has always std = 0 (same point 1 for all cone_angles)
+        other_data_1_anem = [windward_heights, leeward_heights, side_heights]
         # todo: replace "X_dir_anem[:,None]" with two inputs: "np.sin(np.deg2rad....X_dir_anem[:,None])", "np.cos(X_dir_anem[:,None])"
         # todo: remember rad2deg afterwards
         X_data.append(X_data_1_anem)
         y_data.append(X_std_u_anem)
+        ts_data.append(ts_anem)
+        other_data.append(other_data_1_anem)  # final shape (list of lists of 3D arrays: [n_anem][windward/leeward/side][n_cone_angles, n_samples, n_terrain_points]
         data_len_of_each_anem.append(len(X_mean_anem))
         print(f'{mast_anem}: All ML-input-data is collected')
     X_data = np.concatenate(tuple(i for i in X_data), axis=0)  # n_steps + 2 <=> number of terrain heights (e.g. 500) + wind speed (1) + wind dir (1)
     y_data = np.concatenate(y_data)
     start_idxs_of_each_anem = [0] + np.cumsum(data_len_of_each_anem)[:-1].tolist()
-    return  X_data, y_data, all_anem_list, start_idxs_of_each_anem
+    return  X_data, y_data, all_anem_list, start_idxs_of_each_anem, ts_data, other_data
 
 
 # ##################################################################
 # # Getting the data for first time
-# X_data_nonnorm, y_data_nonnorm, all_anem_list, start_idxs_of_each_anem = get_all_10_min_data_at_z_48m(U_min=2) ##  takes a few minutes...
+X_data_nonnorm, y_data_nonnorm, all_anem_list, start_idxs_of_each_anem, ts_data, other_data = get_all_10_min_data_at_z_48m(U_min=5) ##  takes a few minutes...
 # # ##################################################################
 # # # Saving data
 # data_path = os.path.join(os.getcwd(), 'processed_data_for_ML', 'X_y_ML_ready_data_Umin_2_masts_6_all_dirs')
-# np.savez_compressed(data_path, X=X_data_nonnorm, y=y_data_nonnorm, m=all_anem_list, i=start_idxs_of_each_anem)
+# np.savez_compressed(data_path, X=X_data_nonnorm, y=y_data_nonnorm, m=all_anem_list, i=start_idxs_of_each_anem, t=ts_data, o=other_data)
 ##################################################################
 y_data_type = 'Iu'  # 'U', 'std', 'Iu'
 
 # Loading data already saved
-data_path = os.path.join(os.getcwd(), 'processed_data_for_ML', 'X_y_ML_ready_data_Umin_0_masts_6_upstream_only')
+data_path = os.path.join(os.getcwd(), 'processed_data_for_ML', 'X_y_ML_ready_data_Umin_5_masts_6_upstream_only')
 loaded_data = np.load(data_path + '.npz')
 X_data_nonnorm = loaded_data['X']
 X_dirs = X_data_nonnorm[:,1]
@@ -158,6 +178,20 @@ n_samples = X_data_nonnorm.shape[0]
 n_features = X_data_nonnorm.shape[1]
 start_idxs_of_each_anem_2 = np.array(start_idxs_of_each_anem.tolist() + [n_samples])  # this one includes the final index as well
 
+# Getting other weather data
+air_temp = pd.read_csv(r'C:\Users\bercos\PycharmProjects\Metocean\weather_data\air_temperature_1.csv', delimiter=';', skipfooter=1, engine='python')
+sea_temp = pd.read_csv(r'C:\Users\bercos\PycharmProjects\Metocean\weather_data\sea_temperature_1.csv', delimiter=';', skipfooter=1, engine='python')
+ts_air_temp = pd.to_datetime(air_temp['Tid(norsk normaltid)'], format='%d.%m.%Y %H:%M')
+ts_sea_temp = pd.to_datetime(sea_temp['Tid(norsk normaltid)'])
+ts_deltas_air = pd.DataFrame([(ts_air_temp[i+1] - ts_air_temp[i]).seconds for i in range(len(ts_air_temp)-1)])
+# todo: BAD TEMPERATURE DATA QUALITY
+
+
+# Plotting correlation coefficient per feature
+y_plot_corrcoef = [np.corrcoef(X_data_nonnorm[:,i], y_data_nonnorm)[0][1] for i in range(X_data_nonnorm.shape[1])]
+x_plot_corrcoef = [i for i in range(X_data_nonnorm.shape[1])]
+plt.plot(x_plot_corrcoef, y_plot_corrcoef)
+plt.show()
 
 #################################################################
 # Statistical analyses of the distribution of turbulence. Converting y_data (1 dimension) into y2_data (2 dimensions -> 2 Weibull params)
@@ -214,7 +248,7 @@ print(f'Maximum and minimum zscores in y_data is {max(y_data_nonnorm_zscores)} a
 # # Converting outliers to nan
 # y_PDF_data_nonnorm[np.where(bools_outliers)[0]] = np.nan
 # y_data_nonnorm[np.where(bools_outliers)[0]] = np.nan
-# y_data_nonnorm[y_data_nonnorm>1] = np.nan
+y_data_nonnorm[y_data_nonnorm>1] = np.nan
 # ##################################################################
 
 ##################################################################
@@ -375,7 +409,7 @@ def train_and_test_NN(X_train, y_train, X_test, y_test, hp, print_loss_per_epoch
     my_nn.add_module(name='0A', module=my_activation_func())  # Activation function
     for i in range(n_hid_layers):  # Hidden layers
         n_neurons_last_layer = (list(my_nn.modules())[-2]).out_features
-        my_nn.add_module(name=str(i + 1), module=torch.nn.Linear(n_neurons_last_layer, round(2/3 * n_neurons_last_layer)))
+        my_nn.add_module(name=str(i + 1), module=torch.nn.Linear(n_neurons_last_layer, max(round(2/3 * n_neurons_last_layer),5)))
         my_nn.add_module(name=f'{i + 1}A', module=my_activation_func())
     n_neurons_last_layer = (list(my_nn.modules())[-2]).out_features
     my_nn.add_module(name=str(n_hid_layers + 1), module=torch.nn.Linear(n_neurons_last_layer, n_outputs))  # Output layer
@@ -480,7 +514,7 @@ def get_X_y_train_and_test_and_batch_size_from_anems(anem_to_train, anem_to_test
     return X_train, y_train, X_test, y_test, batch_size
 
 
-def find_optimal_hp_for_each_of_my_cases(my_NN_cases, X_data, y_data, n_trials):
+def find_optimal_hp_for_each_of_my_cases(my_NN_cases, X_data, y_data, n_trials, print_loss_per_epoch=False, print_results=False):
     hp_opt_results = []
     for my_NN_case in my_NN_cases:
         anem_to_train = my_NN_case['anem_to_train']
@@ -488,20 +522,20 @@ def find_optimal_hp_for_each_of_my_cases(my_NN_cases, X_data, y_data, n_trials):
         X_train, y_train, X_test, y_test, batch_size = get_X_y_train_and_test_and_batch_size_from_anems(anem_to_train, anem_to_test, all_anem_list, X_data, y_data)
         # Beautiful MAGIC happening
         def hp_opt_objective(trial):
-            weight_decay = trial.suggest_float("weight_decay", 1E-7, 0.1, log=True)
-            momentum =     trial.suggest_float("momentum",     0, 1)
-            lr =           trial.suggest_float("lr",           1E-4, 0.8, log=True)
-            n_hid_layers = trial.suggest_int('n_hid_layers', 1, 5)
-            n_epochs =     10
+            weight_decay = trial.suggest_float("weight_decay", 1E-7, 1E-2, log=True)
+            lr =           trial.suggest_float("lr",          0.01, 0.5, log=True)
+            # n_hid_layers = trial.suggest_int('n_hid_layers', 1, 5)
+            n_hid_layers = 3
+            n_epochs =     20
             hp = {'lr': lr,
                   'batch_size': batch_size,
                   'weight_decay': weight_decay,
-                  'momentum': momentum,
+                  'momentum': 0.9,
                   'n_epochs': n_epochs,
                   'n_hid_layers': n_hid_layers,
-                  'activation': torch.nn.modules.activation.LeakyReLU,
+                  'activation': torch.nn.modules.activation.ReLU,
                   'loss': MSELoss()}
-            _, R2 = train_and_test_NN(X_train, y_train, X_test, y_test, hp=hp, print_loss_per_epoch=False, print_results=False)
+            _, R2 = train_and_test_NN(X_train, y_train, X_test, y_test, hp=hp, print_loss_per_epoch=print_loss_per_epoch, print_results=print_results)
             return R2
         study = optuna.create_study(direction='maximize')
         study.optimize(hp_opt_objective, n_trials=n_trials)
@@ -509,56 +543,57 @@ def find_optimal_hp_for_each_of_my_cases(my_NN_cases, X_data, y_data, n_trials):
         hp_opt_results.append(hp_opt_result)
     return hp_opt_results
 
-# my_NN_cases = [{'anem_to_train':['osp2_A', 'osp2_B', 'synn_A', 'svar_A', 'land_A', 'neso_A'],
-#                 'anem_to_test': ['osp1_A']},
-#                {'anem_to_train': ['synn_A', 'svar_A', 'land_A', 'neso_A'],
-#                 'anem_to_test': ['osp1_A']},
-#                {'anem_to_train': ['osp1_A', 'osp2_A', 'svar_A', 'land_A', 'neso_A'],
-#                 'anem_to_test': ['synn_A']},
-#                {'anem_to_train': ['osp1_A', 'osp2_A', 'synn_A', 'land_A', 'neso_A'],
-#                 'anem_to_test': ['svar_A']},
-#                {'anem_to_train': ['osp1_A', 'osp2_A', 'synn_A', 'svar_A', 'neso_A'],
-#                 'anem_to_test': ['land_A']},
-#                {'anem_to_train': ['osp1_A', 'osp2_A', 'synn_A', 'svar_A', 'land_A'],
-#                 'anem_to_test': ['neso_A']}]
+my_NN_cases = [{'anem_to_train':['osp2_A', 'osp2_B', 'synn_A', 'svar_A', 'land_A', 'neso_A'],
+                'anem_to_test': ['osp1_A']},
+               {'anem_to_train': ['synn_A', 'svar_A', 'land_A', 'neso_A'],
+                'anem_to_test': ['osp1_A']},
+               {'anem_to_train': ['osp1_A', 'osp2_A', 'svar_A', 'land_A', 'neso_A'],
+                'anem_to_test': ['synn_A']},
+               {'anem_to_train': ['osp1_A', 'osp2_A', 'synn_A', 'land_A', 'neso_A'],
+                'anem_to_test': ['svar_A']},
+               {'anem_to_train': ['osp1_A', 'osp2_A', 'synn_A', 'svar_A', 'neso_A'],
+                'anem_to_test': ['land_A']},
+               {'anem_to_train': ['osp1_A', 'osp2_A', 'synn_A', 'svar_A', 'land_A'],
+                'anem_to_test': ['neso_A']}]
 
-my_NN_cases = [{'anem_to_train': ['svar_A'],
-                'anem_to_test': ['svar_A']}]
-
-
-
-test_X_data = np.array([np.arange(1000000), np.arange(1000000), np.arange(1000000)]).T/10000000
-test_y_data = (np.arange(1000000).T/1000000)[:,None]
-
-find_optimal_hp_for_each_of_my_cases(my_NN_cases, X_data=test_X_data, y_data=test_y_data, n_trials=50)
+my_NN_cases = [{'anem_to_train': ['synn_A', 'osp1_A', 'osp2_A', 'svar_A', 'neso_A'],
+                'anem_to_test': ['land_A']}]
 
 
+# # Testing trivial case. Normalization is important!
+# test_X_data = np.array([np.arange(1000000), np.arange(1000000), np.arange(1000000)]).T/1000000   * 10 - 9
+# test_y_data = (np.arange(1000000).T/1000000)[:,None]                                             * 10 - 9
+# find_optimal_hp_for_each_of_my_cases(my_NN_cases, X_data=test_X_data, y_data=test_y_data, n_trials=1, print_loss_per_epoch=True, print_results=True)
+#
 
 
-
-
-X_data_backup = copy.deepcopy(X_data)
-
-X_data = copy.deepcopy(X_data_backup)
-# X_data = np.delete(X_data, [0,1], axis=1) # NOT WORKING FOR THE BEAUTIFUL PLOTS THAT WILL REQUIRE THESE VALUES
-
-X_data = np.delete(X_data, np.arange(2,91), axis=1) # NOT WORKING FOR THE BEAUTIFUL PLOTS THAT WILL REQUIRE THESE VALUES
-
+# X_data_backup = copy.deepcopy(X_data)
+# # X_data = copy.deepcopy(X_data_backup)
+# # X_data = np.delete(X_data, [0,1], axis=1) # NOT WORKING FOR THE BEAUTIFUL PLOTS THAT WILL REQUIRE THESE VALUES
+# # X_data = np.delete(X_data, np.arange(2,91), axis=1) # NOT WORKING FOR THE BEAUTIFUL PLOTS THAT WILL REQUIRE THESE VALUES
 # X_data = np.delete(X_data, 1, axis=1) # NOT WORKING FOR THE BEAUTIFUL PLOTS THAT WILL REQUIRE THESE VALUES
-
 # X_data = np.random.uniform(0,1,size=X_data_backup.shape)
-hp_opt_results_w_dir = find_optimal_hp_for_each_of_my_cases(my_NN_cases, X_data=X_data, y_data=y_data[:,None], n_trials=100)
+
+# y_data
+hp_opt_results_w_dir = find_optimal_hp_for_each_of_my_cases(my_NN_cases, X_data=X_data, y_data=y_data[:,None], n_trials=10)
+# y_PDF_data without U nor Dir
+hp_opt_results_w_dir  = find_optimal_hp_for_each_of_my_cases(my_NN_cases, X_data=X_data[:,2:], y_data=y_PDF_data, n_trials=10)
 
 
 for case_idx in range(len(my_NN_cases)):
     # case_idx = 0
     hp = hp_opt_results_w_dir[case_idx]['best_params']
     hp['activation'] = torch.nn.modules.activation.ELU
+    hp['momentum'] = 0.9
+    hp['n_epochs'] = 30
+    hp['n_hid_layers'] = 3
     hp['loss'] = MSELoss()
     my_NN_case = my_NN_cases[case_idx]
     anem_to_train = my_NN_case['anem_to_train']
     anem_to_test = my_NN_case['anem_to_test']
-    X_train, y_train, X_test, y_test, batch_size = get_X_y_train_and_test_and_batch_size_from_anems(anem_to_train, anem_to_test, all_anem_list, X_data, y_data[:,None], batch_size_desired=15000, batch_size_lims=[5000,30000])
+    # X_train, y_train, X_test, y_test, batch_size = get_X_y_train_and_test_and_batch_size_from_anems(anem_to_train, anem_to_test, all_anem_list, X_data, y_data[:,None], batch_size_desired=15000, batch_size_lims=[5000,30000])
+    X_train, y_train, X_test, y_test, batch_size = get_X_y_train_and_test_and_batch_size_from_anems(anem_to_train, anem_to_test, all_anem_list, X_data, y_PDF_data, batch_size_desired=15000, batch_size_lims=[5000,30000])
+
     hp['batch_size'] = batch_size
     y_pred, R2 = train_and_test_NN(X_train, y_train, X_test, y_test, hp=hp, print_loss_per_epoch=True, print_results=True)
 
@@ -566,19 +601,19 @@ for case_idx in range(len(my_NN_cases)):
     anem_idx = np.where(all_anem_list == my_NN_cases[case_idx]['anem_to_test'][0])[0][0]
     anem_slice = slice(start_idxs_of_each_anem_2[anem_idx], start_idxs_of_each_anem_2[anem_idx + 1])
     plt.figure()
-    plt.scatter(X_dirs[anem_slice], y_data[anem_slice]*y_max, s=0.01, alpha=0.2, c='black', label='Measured')
-    plt.scatter(X_test[:,1].cpu().numpy() * X_maxs[1], y_pred.cpu().numpy()*y_max, s=0.01, alpha=0.2, c='red', label='Predicted')
+    # plt.scatter(X_dirs[anem_slice], y_data[anem_slice] * y_max, s=0.01, alpha=0.2, c='black', label='Measured')
+    plt.scatter(X_dirs[anem_slice], y_PDF_data[anem_slice]*y_max, s=1, alpha=0.2, c='black', label='Measured')
+    plt.scatter(X_test[:,1].cpu().numpy() * X_maxs[1], y_pred.cpu().numpy()*y_max, s=1, alpha=0.2, c='red', label='Predicted')
     # plt.scatter(X_test[:,1].cpu().numpy() * X_maxs[1], y_pred.cpu().numpy()*y_max, s=0.01, alpha=0.2, c='red', label='Mean Measured')
     plt.legend()
-    plt.ylim([0, 5])
+    plt.ylim([0, 1])
     plt.show()
 
 
 
 
 # REMOVING MEANS AND DIRECTIONS FROM THE INPUT DATA
-X_data = np.delete(X_data, [0,1], axis=1) # NOT WORKING FOR THE BEAUTIFUL PLOTS THAT WILL REQUIRE THESE VALUES
-hp_opt_results_w_dir  = find_optimal_hp_for_each_of_my_cases(my_NN_cases, X_data=X_data, y_data=y_PDF_data, n_trials=50)
+# X_data = np.delete(X_data, [0,1], axis=1)
 
 
 
