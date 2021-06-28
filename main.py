@@ -6,6 +6,8 @@ Contact: bercos@vegvesen.no
 import copy
 import datetime
 import os
+import time
+
 import sympy
 import numpy as np
 import pandas as pd
@@ -147,18 +149,18 @@ def get_all_10_min_data_at_z_48m(U_min = 0, windward_dists=[i*(5.+5.*i) for i in
     return  X_data, y_data, all_anem_list, start_idxs_of_each_anem, ts_data, other_data
 
 
-# ##################################################################
-# # Getting the data for first time
-X_data_nonnorm, y_data_nonnorm, all_anem_list, start_idxs_of_each_anem, ts_data, other_data = get_all_10_min_data_at_z_48m(U_min=5) ##  takes a few minutes...
 # # ##################################################################
-# # # Saving data
-# data_path = os.path.join(os.getcwd(), 'processed_data_for_ML', 'X_y_ML_ready_data_Umin_2_masts_6_all_dirs')
+# # # Getting the data for first time
+# X_data_nonnorm, y_data_nonnorm, all_anem_list, start_idxs_of_each_anem, ts_data, other_data = get_all_10_min_data_at_z_48m(U_min=0) ##  takes a few minutes...
+# # # ##################################################################
+# # # # Saving data
+# data_path = os.path.join(os.getcwd(), 'processed_data_for_ML', 'X_y_ML_ready_data_Umin_0_masts_6_all_dirs_w_ts')
 # np.savez_compressed(data_path, X=X_data_nonnorm, y=y_data_nonnorm, m=all_anem_list, i=start_idxs_of_each_anem, t=ts_data, o=other_data)
 ##################################################################
 y_data_type = 'Iu'  # 'U', 'std', 'Iu'
 
 # Loading data already saved
-data_path = os.path.join(os.getcwd(), 'processed_data_for_ML', 'X_y_ML_ready_data_Umin_5_masts_6_upstream_only')
+data_path = os.path.join(os.getcwd(), 'processed_data_for_ML', 'X_y_ML_ready_data_Umin_5_masts_6_all_dirs_w_ts')
 loaded_data = np.load(data_path + '.npz')
 X_data_nonnorm = loaded_data['X']
 X_dirs = X_data_nonnorm[:,1]
@@ -178,12 +180,48 @@ n_samples = X_data_nonnorm.shape[0]
 n_features = X_data_nonnorm.shape[1]
 start_idxs_of_each_anem_2 = np.array(start_idxs_of_each_anem.tolist() + [n_samples])  # this one includes the final index as well
 
-# Getting other weather data
-air_temp = pd.read_csv(r'C:\Users\bercos\PycharmProjects\Metocean\weather_data\air_temperature_1.csv', delimiter=';', skipfooter=1, engine='python')
-sea_temp = pd.read_csv(r'C:\Users\bercos\PycharmProjects\Metocean\weather_data\sea_temperature_1.csv', delimiter=';', skipfooter=1, engine='python')
-ts_air_temp = pd.to_datetime(air_temp['Tid(norsk normaltid)'], format='%d.%m.%Y %H:%M')
-ts_sea_temp = pd.to_datetime(sea_temp['Tid(norsk normaltid)'])
-ts_deltas_air = pd.DataFrame([(ts_air_temp[i+1] - ts_air_temp[i]).seconds for i in range(len(ts_air_temp)-1)])
+# Getting other weather data from https://seklima.met.no/ (use Microsoft Edge!)
+weather_data_path = os.path.join(os.getcwd(), 'weather_data')
+list_weather_data_files = os.listdir(weather_data_path)
+list_air_temp_files = [os.path.join(weather_data_path, file) for file in list_weather_data_files if 'air' in file]
+list_sea_temp_files = [os.path.join(weather_data_path, file) for file in list_weather_data_files if 'sea' in file]
+
+def get_df_of_concatenated_temperatures(list_of_file_paths, label_to_read='Lufttemperatur'):
+    list_of_dfs = [pd.read_csv(file, delimiter=';', skipfooter=1, engine='python') for file in list_of_file_paths]
+    n_files = len(list_of_dfs)
+    for i in range(n_files):  # converting the timestamps to datetime objects
+        list_of_dfs[i]['Tid(norsk normaltid)'] = pd.to_datetime(list_of_dfs[i]['Tid(norsk normaltid)'], format='%d.%m.%Y %H:%M')
+        list_of_dfs[i] = list_of_dfs[i].rename(columns={'Tid(norsk normaltid)':'ts_all_1h', label_to_read:'temperature_'+str(i+1)}).set_index('ts_all_1h').drop(['Navn','Stasjon'], axis=1)
+        list_of_dfs[i]['temperature_'+str(i+1)] = pd.to_numeric(list_of_dfs[i]['temperature_'+str(i+1)].str.replace(',','.'))
+    ts_min = min([min(list_of_dfs[i].index) for i in range(n_files)])
+    ts_max = max([max(list_of_dfs[i].index) for i in range(n_files)])
+    ts_all_1h = pd.date_range(ts_min, ts_max, freq='h')
+    list_of_all_dfs = [pd.DataFrame({'ts_all_1h':ts_all_1h}).set_index('ts_all_1h')] + list_of_dfs
+    final_df = pd.DataFrame().join(list_of_all_dfs, how="outer")
+    final_df['temperature_final'] = final_df.mean(axis=1, skipna=True)
+    return final_df
+
+df_air_temp = get_df_of_concatenated_temperatures(list_air_temp_files, label_to_read='Lufttemperatur')
+df_sea_temp = get_df_of_concatenated_temperatures(list_sea_temp_files, label_to_read='Sjøtemperatur')
+
+
+test = pd.merge(list_of_dfs[0], list_of_dfs[1], on=['ts_all_1h'], how='outer')
+
+for i, file in enumerate(list_air_temp_files):
+    df_air_temp = pd.read_csv(file, delimiter=';', skipfooter=1, engine='python')
+    df_air_temps['ts_'+str(i+1)] = pd.to_datetime(df_air_temp['Tid(norsk normaltid)'], format='%d.%m.%Y %H:%M')
+    df_air_temps['temperature_'+str(i+1)] = df_air_temp['Lufttemperatur'].to_numpy()
+air_temp_1 = pd.read_csv(r'C:\Users\bercos\PycharmProjects\Metocean\weather_data\air_temperature_1.csv', delimiter=';', skipfooter=1, engine='python')
+air_temp_2 = pd.read_csv(r'C:\Users\bercos\PycharmProjects\Metocean\weather_data\air_temperature_2.csv', delimiter=';', skipfooter=1, engine='python')
+
+
+
+
+sea_temp_1 = pd.read_csv(r'C:\Users\bercos\PycharmProjects\Metocean\weather_data\sea_temperature_1.csv', delimiter=';', skipfooter=1, engine='python')
+ts_air_temp = pd.to_datetime(air_temp_1['Tid(norsk normaltid)'], format='%d.%m.%Y %H:%M')
+ts_sea_temp = pd.to_datetime(sea_temp_1['Tid(norsk normaltid)'], format='%d.%m.%Y %H:%M')
+ts_deltas_air = pd.DataFrame([(ts_air_temp[i+1] - ts_air_temp[i]).total_seconds() for i in range(len(ts_air_temp)-1)])
+ts_deltas_sea = pd.DataFrame([(ts_sea_temp[i+1] - ts_sea_temp[i]).total_seconds() for i in range(len(ts_sea_temp)-1)])
 # todo: BAD TEMPERATURE DATA QUALITY
 
 
