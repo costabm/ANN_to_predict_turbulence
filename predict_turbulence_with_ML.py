@@ -1,4 +1,6 @@
 """
+This study uses Machine Learning to predict turbulence at a new location with a given topography, where the learning data
+consists only of turbulence data and topography data at other nearby locations.
 Created: June, 2021
 Contact: bercos@vegvesen.no
 """
