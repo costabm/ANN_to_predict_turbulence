@@ -57,7 +57,7 @@ def strong_wind_events_per_anem(ts, U, U_cond_1=13.9, U_cond_2=17.2):
     return {'ts': strong_wind_ts, 'U': strong_wind_U}
 
 
-def strong_wind_events_per_anem_all_merged(input_fname='01-00-00_all_stats'):
+def strong_wind_events_per_anem_all_merged(folder_name='processed_data', input_fname='01-00-00_all_stats'):
     """
     All the individual strong wind events of each anemometer are merged together. This way, the timestamps where at least 1 anemometer is experiencing strong wind can be obtained.
     Only the mean wind
@@ -65,7 +65,7 @@ def strong_wind_events_per_anem_all_merged(input_fname='01-00-00_all_stats'):
         input_fname: The name of the file containing all the info necessary. e.g. '01-00-00_all_stats' or '00-10-00_all_stats'
     Returns: (df, dict) with all timestamps and wind speeds where at least 1 anem. feels strong wind, BUT, concomitant non-strong wind speeds (concomitant w/ strong winds elsewhere) are still missing!
     """
-    with open(os.path.join(os.getcwd(), 'processed_data', input_fname), "r") as json_file:
+    with open(os.path.join(os.getcwd(), folder_name, input_fname), "r") as json_file:
         pro_data = json.load(json_file)
     # Finding strong wind events (also denoted here as storms) indepentently for each anemometer
     storm_df_all = pd.DataFrame(columns=['ts'])
@@ -105,8 +105,8 @@ def listing_consecutive_time_stamps(list_of_timestamps, interval='01:00:00'):
     return big_list
 
 
-def find_storm_timestamps(input_fname='01-00-00_all_stats'):
-    df_storms_concomit_wind_missing, dict_storms_concomit_wind_missing = strong_wind_events_per_anem_all_merged(input_fname=input_fname)
+def find_storm_timestamps(folder_name='processed_data_1', input_fname='01-00-00_all_stats'):
+    df_storms_concomit_wind_missing, dict_storms_concomit_wind_missing = strong_wind_events_per_anem_all_merged(folder_name=folder_name, input_fname=input_fname)
     ts_storms_all_in_one_list = df_storms_concomit_wind_missing['ts']
     ts_storms_organized = listing_consecutive_time_stamps(ts_storms_all_in_one_list, interval=input_fname[:8].replace('-',':'))
     return ts_storms_organized
