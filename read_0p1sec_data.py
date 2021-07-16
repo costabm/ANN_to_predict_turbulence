@@ -344,6 +344,29 @@ def process_data_fun(window='01:00:00', masts_to_read=['synn', 'osp1', 'osp2', '
     return data_processed
 
 
+def raw_data_to_NWZ_fun(masts_to_read=['synn', 'osp1', 'osp2', 'svar'], date_from_read='2017-12-21 00:00:00.0', date_to_read='2017-12-21 05:00:00.0', raw_data_folder='D:\PhD\Metocean_raw_data'):
+    """
+    Same function as process_data_fun, but instead simply meant to transform 10 Hz data into NWZ coor. and leave it at 10Hz
+    :param masts_to_read: list. Choose from: 'osp1', 'osp2', 'svar', 'synn'
+    :param date_from_read: str. date/time to read from
+    :param date_to_read: str. date/time to read to
+    :return: nested dictionary with all raw wind speeds in the NWZ coordinate system
+    """
+    data = read_0p1sec_data_fun(masts_to_read=masts_to_read, date_from_read=date_from_read, date_to_read=date_to_read, raw_data_folder=raw_data_folder)
+    data_processed = {}
+    for mast in masts_to_read:
+        data_processed[mast] = {}
+        for anem in ['A', 'B', 'C']:
+            ts = data[mast]['TIMESTAMP']
+            U_Gill = data[mast][f'Sonic_{anem}_U_Axis_Velocity'].values
+            V_Gill = data[mast][f'Sonic_{anem}_V_Axis_Velocity'].values
+            W_Gill = data[mast][f'Sonic_{anem}_W_Axis_Velocity'].values
+            V_KVT = np.array([U_Gill, V_Gill, W_Gill])
+            V_NWZ = T_NWZ_Gill_fun(mast, anem) @ V_KVT  # North-West-Zenith coordinate system
+            data_processed[mast][anem] = {'ts':ts, 'V_NWZ':V_NWZ}
+    return data_processed
+
+
 def create_processed_data_files(date_start=datetime.datetime.strptime('2015-01-01 00:00:00.0', '%Y-%m-%d %H:%M:%S.%f'), n_months=12 * 6, window='01:00:00', save_in_folder='processed_data',
                                 masts_to_read=['synn', 'osp1', 'osp2', 'svar']):
     """
