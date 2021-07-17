@@ -10,7 +10,7 @@ st_window_sec = 600  # seconds. Moving Window
 mast_list = ['synn', 'osp1', 'osp2', 'svar']
 
 storm_MSE = {}
-for storm_id in range(17, len(storm_timestamps)):
+for storm_id in range(len(storm_timestamps)):
     storm_MSE[str(storm_id)] = {}
     time_str_format = '%Y-%m-%d %H:%M:%S.%f'
 
@@ -32,14 +32,14 @@ for storm_id in range(17, len(storm_timestamps)):
             st_ts_w_start = st_ts.insert(loc=0, item=st_ts[0] - pd.to_timedelta(st_window_str))
             st_V = np.array(st_data[mast]['A']['means']).T
             nst_ts = pd.to_datetime(raw_data[mast][anem]['ts'])
-            nst_V = pd.DataFrame(raw_data[mast][anem]['V_NWZ'].T).rolling(st_window_sec * fs, center=True, min_periods=int(st_window_sec/2)).mean().to_numpy().T
+            nst_V = pd.DataFrame(raw_data[mast][anem]['V_NWZ'].T).rolling(st_window_sec * fs, center=True, min_periods=int(st_window_sec/3)).mean().to_numpy().T
             raw_V = raw_data[mast][anem]['V_NWZ']
             # Organizing data in one DataFrame:
             st_df =  pd.DataFrame({ 'ts':st_ts, 'block_num':np.arange(len(st_ts)), 'st_V_N':st_V[0], 'st_V_W':st_V[1], 'st_V_Z':st_V[2]})
             nst_df = pd.DataFrame({'ts':nst_ts, 'nst_V_N':nst_V[0], 'nst_V_W':nst_V[1], 'nst_V_Z':nst_V[2]})
             df_all = pd.merge(st_df, nst_df, how='outer', on='ts', sort=True)  # merging st and nst data.
             df_all[['st_V_N','st_V_W','st_V_Z','block_num']] = df_all[['st_V_N','st_V_W','st_V_Z','block_num']].fillna(method='backfill')
-            df_all = df_all.dropna()
+            df_all = df_all.dropna(subset=['st_V_N','st_V_W','st_V_Z'])  # only drop nan if they are in the st data (e.g. all values from 14:10 to 14:18:39, when 10-min window)
             df_all['block_num'] = df_all['block_num'].astype(int)
             # Finding out large non-stationarities:
             df_MSE = pd.DataFrame({'block_num': df_all['block_num'],
@@ -50,7 +50,7 @@ for storm_id in range(17, len(storm_timestamps)):
             df_MSE['ts'] = st_ts
             storm_MSE[str(storm_id)][mast+'_'+anem] = df_MSE
             # Confirming the merging is well done (exact same graph obtained, but with each horizontal bar connected to the next one):
-            if any((df_MSE['V_N'] + df_MSE['V_W']) > 100000):
+            if any((df_MSE['V_N'] + df_MSE['V_W']) > 10000):
                 NWZ_idx = 0
                 plt.figure(dpi=400)
                 plt.title(f'Storm: {storm_id}. Mast: {mast}')
@@ -67,7 +67,7 @@ for storm_id in range(17, len(storm_timestamps)):
                 # plt.plot(nst_ts, raw_V[NWZ_idx], alpha=0.3, c='green', lw=0.2)
                 # plt.xlim(nst_ts.iloc[0*6000], nst_ts.iloc[10*6000])
                 # plt.show()
-            print(f'Storm {storm_id} assessed')
+    print(f'Storm {storm_id} assessed')
 
 
 
