@@ -194,8 +194,8 @@ add_roughness_input = True
 include_weather_data = True
 dir_sector_amp = 1  # amplitude in degrees of each directional sector, for calculating mean properties
 
-
-for only_1_elevation_profile, add_roughness_input in zip([True,False], [True,False]):
+# for only_1_elevation_profile, add_roughness_input in zip([True,False], [True,False]):
+for only_1_elevation_profile, add_roughness_input in [(True, True)]:
     # for U_min in [0,2,5]:
     for U_min in [2]:
         # for dir_sector_amp in [1,3]:

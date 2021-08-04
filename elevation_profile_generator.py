@@ -3,6 +3,7 @@ from scipy.interpolate import interpn, RegularGridInterpolator, RectBivariateSpl
 from orography import get_all_geotiffs_merged
 import matplotlib.pyplot as plt
 from scipy.spatial import cKDTree
+import copy
 
 lon_mosaic, lat_mosaic, imgs_mosaic = get_all_geotiffs_merged()
 
@@ -52,28 +53,87 @@ def elevation_profile_generator(point_1, point_2, step_distance=10, list_of_dist
 
 
 def plot_elevation_profile(point_1, point_2, step_distance, list_of_distances):
-    new_dists, heights = elevation_profile_generator(point_1, point_2, step_distance=step_distance, list_of_distances=list_of_distances)
-    plt.figure()
-    plt.title('Terrain Profile')
-    plt.plot(new_dists, heights, linestyle='--', marker='o', c='peru')
-    plt.xlabel('Distance [m]')
+    dists, heights = elevation_profile_generator(point_1, point_2, step_distance=10, list_of_distances=False)
+    sea_idxs = np.where(heights==0)[0]
+    land_idxs = np.where(heights!=0)[0]
+
+    plt.figure(dpi=400, figsize=(5,1.8))
+    plt.title('Upstream terrain profile example')
+    plt.plot(dists[land_idxs], heights[land_idxs], c='peru' , linestyle='-', linewidth=1, zorder=1.9) #c='peru')
+    plt.scatter(dists[land_idxs], heights[land_idxs], c='peru' , s=1, label='Ground') #c='peru')
+    plt.scatter(dists[sea_idxs], heights[sea_idxs], c='skyblue', s=2, label='Sea', zorder=2)  # c='peru')
+    plt.xlabel('Distance upstream [m]')
     plt.ylabel('Height [m]')
+    plt.ylim([-10, 400])
+    plt.legend(markerscale=4)
+    plt.tight_layout()
+    plt.savefig('plots/TerrainProfile_example.png')
     plt.show()
 
-    plt.figure(dpi=600)
-    plt.title('Topography and selected points')
+    new_dists, new_heights = elevation_profile_generator(point_1, point_2, step_distance=step_distance, list_of_distances=list_of_distances)
+    new_sea_idxs = np.where(new_heights==0)[0]
+    new_land_idxs = np.where(new_heights!=0)[0]
+
+    plt.figure(dpi=400, figsize=(5,1.8))
+    plt.title('Z vector example')
+    # plt.plot(new_dists, new_heights, c='black', linestyle='--', alpha=0.6, linewidth=1) #c='peru')
+    plt.scatter(new_dists, new_heights, c='black', s=3, label='Ground')  # c='peru')
+    plt.xlabel('Distance upstream [m]')
+    plt.ylabel('Height [m]')
+    plt.ylim([-10, 400])
+    plt.tight_layout()
+    plt.savefig('plots/TerrainProfile_2_example.png')
+    plt.show()
+
+
+    plt.figure(dpi=400, figsize=(5,1.8))
+    plt.title('R vector example')
+    plt.scatter(new_dists[new_sea_idxs], np.zeros(len(new_sea_idxs)), c='black', s=2, label='Ground')  # c='peru')
+    plt.scatter(new_dists[new_land_idxs], np.ones(len(new_land_idxs)), c='black', s=2, label='Ground')  # c='peru')
+    plt.xlabel('Distance upstream [m]')
+    plt.ylabel('Norm. roughness')
+    plt.yticks([0,1])
+    plt.tight_layout()
+    plt.savefig('plots/TerrainProfile_3_example.png')
+    plt.show()
+
+
+    lon_lims = [-50000, -20000]
+    lat_lims = [6.685E6, 6.715E6]
+    lon_lim_idxs = [np.where(lon_mosaic[0,:]==lon_lims[0])[0][0], np.where(lon_mosaic[0,:]==lon_lims[1])[0][0]]
+    lat_lim_idxs = [np.where(lat_mosaic[:,0]==lat_lims[0])[0][0], np.where(lat_mosaic[:,0]==lat_lims[1])[0][0]]
+    lon_mosaic_crop = lon_mosaic[lat_lim_idxs[1]:lat_lim_idxs[0], lon_lim_idxs[0]:lon_lim_idxs[1]]
+    lat_mosaic_crop = lat_mosaic[lat_lim_idxs[1]:lat_lim_idxs[0], lon_lim_idxs[0]:lon_lim_idxs[1]]
+    imgs_mosaic_crop = imgs_mosaic[lat_lim_idxs[1]:lat_lim_idxs[0], lon_lim_idxs[0]:lon_lim_idxs[1]]
+    cmap = copy.copy(plt.get_cmap('magma_r'))
+    imgs_mosaic_crop = np.ma.masked_where(imgs_mosaic_crop == 0, imgs_mosaic_crop)  # set mask where height is 0, to be converted to another color
+    cmap.set_bad(color='skyblue')  # color where height == 0
+    plt.figure(dpi=400)
+    plt.title('Topography: Fetch sample example')
     bbox = ((lon_mosaic.min(),   lon_mosaic.max(),
              lat_mosaic.min(),  lat_mosaic.max()))
-    plt.xlim(bbox[0], bbox[1])
-    plt.ylim(bbox[2], bbox[3])
-    plt.imshow(imgs_mosaic, extent=bbox, zorder=0, cmap=plt.get_cmap('magma_r'))
-    plt.scatter(point_1[0], point_1[1], c='red', marker='x')
-    plt.scatter(point_2[0], point_2[1], c='red', marker='x')
-    plt.xlim([-50000, -20000])
-    plt.ylim([6.685E6, 6.715E6])
+    bbox = ((lon_mosaic_crop.min(),   lon_mosaic_crop.max(),
+             lat_mosaic_crop.min(),  lat_mosaic_crop.max()))
+    # plt.xlim(bbox[0], bbox[1])
+    # plt.ylim(bbox[2], bbox[3])
+    imshow = plt.imshow(imgs_mosaic_crop, extent=bbox, zorder=0, cmap=cmap)
+    plt.scatter(point_1[0], point_1[1], marker='o', facecolors='none', edgecolors='black', label='Measurement location')
+    plt.scatter(point_2[0], point_2[1], marker='o', facecolors='none', edgecolors='black', s=4)
+    plt.plot([point_1[0], point_2[0]], [point_1[1], point_2[1]], c='black', linestyle='--', label='Upstream fetch')
+    cb = plt.colorbar(imshow)
+
+    # plt.xlim([-50000, -20000])
+    # plt.ylim([6.685E6, 6.715E6])
     plt.xlabel('Easting [m]')
     plt.ylabel('Northing [m]')
+    cb.set_label('Height [m]')
+    handles, labels = plt.gca().get_legend_handles_labels()
+    order = [1, 0]
+    plt.legend([handles[idx] for idx in order], [labels[idx] for idx in order])
+    plt.tight_layout()
+    plt.savefig('plots/2D_map_2_points_example.png')
     plt.show()
+    pass
 
 
 # TRASH
