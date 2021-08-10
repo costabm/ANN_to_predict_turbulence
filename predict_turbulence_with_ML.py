@@ -31,6 +31,7 @@ from read_0p1sec_data import create_processed_data_files, compile_all_processed_
 from find_storms import create_storm_data_files, compile_storm_data_files, find_storm_timestamps, organized_dataframes_of_storms, merge_two_all_stats_files
 import optuna
 from elevation_profile_generator import elevation_profile_generator, plot_elevation_profile, get_point2_from_point1_dir_and_dist
+from sklearn.metrics import r2_score
 
 
 def density_scatter(x , y, ax = None, sort = True, bins = 20, **kwargs )   :
@@ -66,6 +67,36 @@ def test_elevation_profile_at_given_point_dir_dist(point_1=[-34625., 6700051.], 
     if plot:
         plot_elevation_profile(point_1=point_1, point_2=point_2, step_distance=step_distance, list_of_distances=list_of_distances)
     return dists, heights
+
+
+def plot_topography_per_anem(list_of_degs = list(range(360)), list_of_distances=[i*(5.+5.*i) for i in range(45)]):
+    from orography import synn_EN_33, svar_EN_33, osp1_EN_33, osp2_EN_33, land_EN_33, neso_EN_33
+    anem_EN_33 = {'synn':synn_EN_33, 'svar':svar_EN_33, 'osp1':osp1_EN_33, 'osp2':osp2_EN_33, 'land':land_EN_33, 'neso':neso_EN_33}
+    for anem, anem_coor in anem_EN_33.items():
+        dists_all_dirs = []
+        heights_all_dirs = []
+        degs = []
+        for d in list_of_degs:
+            dists, heights = test_elevation_profile_at_given_point_dir_dist(point_1=anem_coor, direction_deg=d, step_distance=False, total_distance=False, list_of_distances=list_of_distances, plot=False)
+            dists_all_dirs.append(dists)
+            heights_all_dirs.append(heights)
+            degs.append(d)
+        degs = np.array(degs)
+        dists_all_dirs = np.array(dists_all_dirs)
+        heights_all_dirs = np.array(heights_all_dirs)
+        cmap = copy.copy(plt.get_cmap('magma_r'))
+        heights_all_dirs = np.ma.masked_where(heights_all_dirs == 0, heights_all_dirs)  # set mask where height is 0, to be converted to another color
+        plt.figure(dpi=500)
+        plt.gca().patch.set_color('skyblue')
+        plt.title(anem)
+        # plt.contourf(degs, dists_all_dirs[0], heights_all_dirs.T, levels=np.linspace(0,800,100), cmap=cmap)
+        plt.pcolormesh(degs, dists_all_dirs[0], heights_all_dirs.T, cmap=cmap, shading='auto', vmin = 0., vmax = 800.)
+        plt.colorbar()
+        plt.savefig(os.path.join(os.getcwd(), 'plots', f'Topography_per_anem-{anem}.png'))
+        plt.show()
+    return None
+
+plot_topography_per_anem(list_of_degs = list(range(360)), list_of_distances=[i*(5.+5.*i) for i in range(45)])
 
 
 def convert_angle_to_0_2pi_interval(angle, input_and_output_in_degrees=True):
@@ -191,17 +222,17 @@ U_min = 2
 y_data_type = 'Iu'  # 'U', 'std', 'Iu'
 only_1_elevation_profile = True
 add_roughness_input = True
-include_weather_data = True
+input_weather_data = True
+input_wind_data = True
+do_sector_avg = True
 dir_sector_amp = 1  # amplitude in degrees of each directional sector, for calculating mean properties
 
 # for only_1_elevation_profile, add_roughness_input in zip([True,False], [True,False]):
-for only_1_elevation_profile, add_roughness_input in [(True, True)]:
+for input_weather_data, input_wind_data in [(True, True)]:  # , (False, False)]:
     # for U_min in [0,2,5]:
-    for U_min in [2]:
+    for do_sector_avg in [False]:  #, True]:
         # for dir_sector_amp in [1,3]:
         for dir_sector_amp in [1]:
-
-
             # Loading data already saved
             data_path = os.path.join(os.getcwd(), 'processed_data_for_ML', f'X_y_ML_ready_data_Umin_{U_min}_masts_6_new_dirs_w_ts')
             loaded_data = np.load(data_path + '.npz')
@@ -227,12 +258,15 @@ for only_1_elevation_profile, add_roughness_input in [(True, True)]:
             if only_1_elevation_profile:
                 X_data_nonnorm = copy.deepcopy(X_data_nonnorm[:,:2+45])
 
+            # if not input_wind_data: todo: TRASH
+            #     X_data_nonnorm = copy.deepcopy(X_data_nonnorm[:,2:])
+
             if add_roughness_input:
                 X_roughness = X_data_nonnorm_orig[:,2:2+45].astype(bool).astype(float)  # water level will become 0, everything else will become 1
                 X_roughness = X_roughness[:,3:]  # the first 2 points are always 1 so they become NaN when normalized!
                 X_data_nonnorm = copy.deepcopy(np.hstack((X_data_nonnorm, X_roughness)))
 
-            if include_weather_data:
+            if input_weather_data:
                 # Getting other weather data from https://seklima.met.no/ (use Microsoft Edge!)
                 weather_data_path = os.path.join(os.getcwd(), 'weather_data')
                 list_weather_data_files = os.listdir(weather_data_path)
@@ -356,10 +390,12 @@ for only_1_elevation_profile, add_roughness_input in [(True, True)]:
             y_data_nonnorm =     all_data.iloc[:, n_features].to_numpy()
             y_PDF_data_nonnorm = all_data.iloc[:,n_features+1:-1].to_numpy()
             start_idxs_of_each_anem = np.intersect1d(all_data['anem'], np.arange(len(all_anem_list)).tolist(), return_indices=True)[1]
-            X_dir_sectors = np.searchsorted(dir_sectors, X_data_nonnorm[:,1], side='right') - 1  # groups all the measured directions into sectors
+            # X_dir_sectors = np.searchsorted(dir_sectors, X_data_nonnorm[:,1], side='right') - 1  # groups all the measured directions into sectors
             n_samples = X_data_nonnorm.shape[0]
             start_idxs_of_each_anem_2 = np.array(start_idxs_of_each_anem.tolist() + [n_samples])  # this one includes the final index as well
-            X_dirs = copy.deepcopy(X_data_nonnorm[:,4])
+
+            dirs_idx = 4 if input_weather_data else 1
+            X_dirs = copy.deepcopy(X_data_nonnorm[:,dirs_idx])
             X_dir_sectors = np.searchsorted(dir_sectors, X_dirs, side='right') - 1  # groups all the measured directions into sectors
 
             ##################################################################
@@ -383,7 +419,6 @@ for only_1_elevation_profile, add_roughness_input in [(True, True)]:
             #     y_data[anem_slice] = y_data[anem_slice] - np.mean(y_data[anem_slice]) + mean_all_y_data
             # ################################################################## @@@@
 
-
             # Generating synthetic data, using only the weibull parameters for each 1-deg sector and anemometer
             y_data_synth =  np.empty((len(y_data_nonnorm)))  # 4 parameters in the exponentiated weibull distribution
             y_data_synth[:] = np.nan
@@ -400,7 +435,6 @@ for only_1_elevation_profile, add_roughness_input in [(True, True)]:
                     elif PDF_used == 'expweibull':
                         param_a, param_c, param_loc, param_scale = y_PDF_data_nonnorm_360dirs[anem_idx][s]
                         y_data_synth[anem_slice][idxs_360dir] = stats.exponweib.rvs(param_a, param_c, param_loc, param_scale, size=len(idxs_360dir))
-
 
             # Plotting synthetic data by anemometer
             def plot_y_PDF_param_data():
@@ -606,10 +640,10 @@ for only_1_elevation_profile, add_roughness_input in [(True, True)]:
                 return X_train, y_train, X_test, y_test, batch_size
 
 
-            n_hid_layers = 2
-            n_epochs = 25
-            momentum = 0.9
-            activation_fun = torch.nn.modules.activation.ReLU
+            # n_hid_layers = 2
+            # n_epochs = 25
+            # momentum = 0.9
+            activation_fun = torch.nn.modules.activation.ELU
 
             def find_optimal_hp_for_each_of_my_cases(my_NN_cases, X_data, y_data, n_trials, print_loss_per_epoch=False, print_results=False):
                 hp_opt_results = []
@@ -621,7 +655,9 @@ for only_1_elevation_profile, add_roughness_input in [(True, True)]:
                     def hp_opt_objective(trial):
                         weight_decay = trial.suggest_float("weight_decay", 1E-7, 1E-2, log=True)
                         lr =           trial.suggest_float("lr",          0.01, 0.5, log=True)
-                        # n_hid_layers = trial.suggest_int('n_hid_layers', 1, 5)
+                        momentum = trial.suggest_float("momentum", 0., 0.95)
+                        n_hid_layers = trial.suggest_int('n_hid_layers', 2, 4)
+                        n_epochs = trial.suggest_int('n_epochs', 5, 50)
 
                         hp = {'lr': lr,
                               'batch_size': batch_size,
@@ -639,7 +675,7 @@ for only_1_elevation_profile, add_roughness_input in [(True, True)]:
                     hp_opt_results.append(hp_opt_result)
                 return hp_opt_results
 
-            my_NN_cases = [{'anem_to_train':['osp2_A', 'osp2_B', 'synn_A', 'svar_A', 'land_A', 'neso_A'],
+            my_NN_cases = [{'anem_to_train': ['osp2_A', 'synn_A', 'svar_A', 'land_A', 'neso_A'],
                             'anem_to_test': ['osp1_A']},
                            {'anem_to_train': ['synn_A', 'svar_A', 'land_A', 'neso_A'],
                             'anem_to_test': ['osp1_A']},
@@ -680,54 +716,130 @@ for only_1_elevation_profile, add_roughness_input in [(True, True)]:
             # X_data = np.delete(X_data, 1, axis=1) # NOT WORKING FOR THE BEAUTIFUL PLOTS THAT WILL REQUIRE THESE VALUES
             # X_data = np.random.uniform(0,1,size=X_data_backup.shape)
 
-            n_trials = 30
-            # y_data
-            # hp_opt_results = find_optimal_hp_for_each_of_my_cases(my_NN_cases, X_data=X_data, y_data=y_data[:,None], n_trials=n_trials)
-            # y_PDF_data
-            hp_opt_results_PDF  = find_optimal_hp_for_each_of_my_cases(my_NN_cases, X_data=X_data, y_data=y_PDF_data, n_trials=n_trials)
-            # without any weather data:
+            n_trials = 500
 
+
+            if do_sector_avg:
+                # y_PDF_data
+                hp_opt_results_PDF  = find_optimal_hp_for_each_of_my_cases(my_NN_cases, X_data=X_data, y_data=y_PDF_data, n_trials=n_trials)
+            else:
+                # y_data
+                hp_opt_results = find_optimal_hp_for_each_of_my_cases(my_NN_cases, X_data=X_data, y_data=y_data[:,None], n_trials=n_trials)
 
             for case_idx in range(len(my_NN_cases)):
-                # case_idx = 0
-                # hp = hp_opt_results_w_weather[case_idx]['best_params']
-                # hp['activation'] = activation_fun
-                # hp['momentum'] = momentum
-                # hp['n_epochs'] = n_epochs
-                # hp['n_hid_layers'] = n_hid_layers
-                # hp['loss'] = MSELoss()
-                hp_PDF = hp_opt_results_PDF[case_idx]['best_params']
-                hp_PDF['activation'] = activation_fun
-                hp_PDF['momentum'] = momentum
-                hp_PDF['n_epochs'] = n_epochs
-                hp_PDF['n_hid_layers'] = n_hid_layers
-                hp_PDF['loss'] = MSELoss()
                 my_NN_case = my_NN_cases[case_idx]
                 anem_to_train = my_NN_case['anem_to_train']
                 anem_to_test = my_NN_case['anem_to_test']
-                # X_train, y_train, X_test, y_test, batch_size = get_X_y_train_and_test_and_batch_size_from_anems(anem_to_train, anem_to_test, all_anem_list, X_data, y_data[:,None], batch_size_desired=15000, batch_size_lims=[5000,30000])
-                # hp['batch_size'] = batch_size
-                # y_pred, R2 = train_and_test_NN(X_train, y_train, X_test, y_test, hp=hp, print_loss_per_epoch=True, print_results=True)
-                X_train, y_train, X_test, y_test, batch_size = get_X_y_train_and_test_and_batch_size_from_anems(anem_to_train, anem_to_test, all_anem_list, X_data, y_PDF_data, batch_size_desired=15000, batch_size_lims=[5000,30000])
-                hp_PDF['batch_size'] = batch_size
-                y_PDF_pred, R2 = train_and_test_NN(X_train, y_train, X_test, y_test, hp=hp_PDF, print_loss_per_epoch=True, print_results=True)
+                if do_sector_avg:
+                    hp_PDF = hp_opt_results_PDF[case_idx]['best_params']
+                    hp_PDF['activation'] = activation_fun
+                    # hp_PDF['momentum'] = momentum
+                    # hp_PDF['n_epochs'] = n_epochs
+                    # hp_PDF['n_hid_layers'] = n_hid_layers
+                    hp_PDF['loss'] = MSELoss()
+                    X_train, y_train, X_test, y_test, batch_size = get_X_y_train_and_test_and_batch_size_from_anems(anem_to_train, anem_to_test, all_anem_list, X_data, y_PDF_data, batch_size_desired=15000, batch_size_lims=[5000,30000])
+                    hp_PDF['batch_size'] = batch_size
+                    if not input_wind_data:
+                        features_to_del = [3, 4] if input_weather_data else [0, 1]
+                        X_train_2 = Tensor(np.delete(X_train.cpu().numpy(), features_to_del, axis=1)).to(device)
+                        X_test_2  = Tensor(np.delete( X_test.cpu().numpy(), features_to_del, axis=1)).to(device)
+                        y_PDF_pred, R2 = train_and_test_NN(X_train_2, y_train, X_test_2, y_test, hp=hp_PDF, print_loss_per_epoch=True, print_results=True)
+                    else:
+                        y_PDF_pred, R2 = train_and_test_NN(X_train, y_train, X_test, y_test, hp=hp_PDF, print_loss_per_epoch=True, print_results=True)
+                    n_features = X_data_nonnorm.shape[1]
+                else:
+                    hp = hp_opt_results[case_idx]['best_params']
+                    hp['activation'] = activation_fun
+                    # hp['momentum'] = momentum
+                    # hp['n_epochs'] = n_epochs
+                    # hp['n_hid_layers'] = n_hid_layers
+                    hp['loss'] = MSELoss()
+                    X_train, y_train, X_test, y_test, batch_size = get_X_y_train_and_test_and_batch_size_from_anems(anem_to_train, anem_to_test, all_anem_list, X_data, y_data[:,None], batch_size_desired=15000, batch_size_lims=[5000,30000])
+                    hp['batch_size'] = batch_size
+                    y_pred, R2 = train_and_test_NN(X_train, y_train, X_test, y_test, hp=hp, print_loss_per_epoch=True, print_results=True)
 
                 # PLOT PREDICTIONS
+                nice_str_dict = {'osp1_A':'Ospøya 1', 'osp2_A':'Ospøya 2', 'synn_A':'Synnøytangen', 'svar_A':'Svarvhelleholmen', 'land_A':'Landrøypynten', 'neso_A':'Nesøya'}
+                X_test_dirs_nonnorm = X_test[:, dirs_idx].cpu().numpy() * (X_maxs[dirs_idx] - X_mins[dirs_idx]) + X_mins[dirs_idx]
+                y_test_nonnorm = y_test.cpu().numpy() * (y_max - y_min) + y_min
                 anem_idx = np.where(all_anem_list == my_NN_cases[case_idx]['anem_to_test'][0])[0][0]
                 anem_slice = slice(start_idxs_of_each_anem_2[anem_idx], start_idxs_of_each_anem_2[anem_idx + 1])
                 plt.figure()
-                plt.title(my_NN_cases[case_idx]['anem_to_test'][0] + '.  R2='+ str(np.round(R2.item(), 2)))
-                plt.scatter(X_dirs[anem_slice], y_data[anem_slice] * (y_max-y_min) + y_min, s=0.01, alpha=0.2, c='black', label='Measured')
-                plt.scatter(X_dirs[anem_slice], y_PDF_data[anem_slice] * (y_PDF_maxs-y_PDF_mins) + y_PDF_mins, s=0.01, alpha=0.2, c='blue', label='Measured Mean')
-                # plt.scatter(X_test[:,4].cpu().numpy() * (X_maxs[4] - X_mins[5]) + X_mins[4], y_pred.cpu().numpy() * (y_max-y_min) + y_min, s=0.01, alpha=0.2, c='red', label='Predicted')
-                plt.scatter(X_test[:,4].cpu().numpy() * (X_maxs[4] - X_mins[5]) + X_mins[4], y_PDF_pred.cpu().numpy() * (y_PDF_maxs-y_PDF_mins) + y_PDF_mins, s=0.01, alpha=0.2, c='orange', label='Predicted Mean')
+                plt.title(nice_str_dict[my_NN_cases[case_idx]['anem_to_test'][0]] + '.  $R^2='+ str(np.round(R2.item(), 2))+'$')
+                ########## ATTENTION: I SHOULDN'T BE USING y_data, but instead y_test since one data point was removed to find a divisor for the batch size.
+                # CERTAIN TRASH: plt.scatter(X_dirs[anem_slice], y_data[anem_slice] * (y_max-y_min) + y_min, s=0.01, alpha=0.2, c='black', label='Measured')
+                # PERHAPS TRASH: plt.scatter(X_dirs[anem_slice], y_PDF_data[anem_slice] * (y_PDF_maxs-y_PDF_mins) + y_PDF_mins, s=0.01, alpha=0.2, c='blue', label='Measured Mean')
+                plt.scatter(X_test_dirs_nonnorm, y_test_nonnorm, s=0.01, alpha=0.2, c='black', label='Measured')
+                if do_sector_avg:
+                    plt.scatter(X_test_dirs_nonnorm, y_PDF_pred.cpu().numpy() * (y_PDF_maxs - y_PDF_mins) + y_PDF_mins, s=0.01, alpha=0.2, c='orange', label='Predicted Mean')
+                else:
+                    y_pred_nonnorm = y_pred.cpu().numpy() * (y_max - y_min) + y_min
+                    plt.scatter(X_test_dirs_nonnorm, y_pred_nonnorm, s=0.01, alpha=0.2, c='orange', label='Predicted')
                 plt.legend(markerscale=50., loc=1)
-                plt.ylabel('Iu')
-                plt.xlabel('Wind direction [deg]')
+                plt.ylabel('$I_u$')
+                plt.xlabel('Wind from direction [\N{DEGREE SIGN}]')
                 plt.xlim([0, 360])
                 plt.ylim([0, 0.8])
-                plt.savefig(os.path.join(os.getcwd(), 'plots', f'{case_idx}_predicted_{y_data_type}_{anem_to_test[0]}_Umin_{U_min}_Rough-{str(add_roughness_input)[0]}_Weather-{str(include_weather_data)[0]}_1Profile-{str(only_1_elevation_profile)[0]}_Sector-{dir_sector_amp}.png'))
-                plt.show()
+                plt.savefig(os.path.join(os.getcwd(), 'plots', f'{case_idx}_predicted_{y_data_type}_{anem_to_test[0]}_Umin_{U_min}_Rough-{str(add_roughness_input)[0]}_Weather-{str(input_weather_data)[0]}_1Profile-{str(only_1_elevation_profile)[0]}_Sector-{dir_sector_amp}_Avg-{str(do_sector_avg)[0]}.png'))
+                # plt.show()
+
+                # PLOT MEANS OF PREDICTIONS
+                if not do_sector_avg:
+                    X_dir_sectors = np.searchsorted(dir_sectors, X_test_dirs_nonnorm, side='right') - 1  # groups all the measured directions into sectors
+                    y_test_mean = np.array([np.mean(y_test_nonnorm[np.where(X_dir_sectors == d)[0]]) for d in dir_sectors])
+                    y_pred_mean = np.array([np.mean(y_pred_nonnorm[np.where(X_dir_sectors == d)[0]]) for d in dir_sectors])
+                    # Removing NaN from the data after organizing it into a dataframe
+                    # all_mean_data = pd.concat([pd.DataFrame(dir_sectors), pd.DataFrame(y_test_mean), pd.DataFrame(y_pred_mean)], axis=1).dropna(axis=0, how='any').reset_index(drop=True)
+                    all_mean_data = pd.DataFrame({'dir_sectors':dir_sectors, 'y_test_mean':y_test_mean, 'y_pred_mean':y_pred_mean}).dropna(axis=0, how='any').reset_index(drop=True)
+                    R2_of_means = r2_score(all_mean_data['y_test_mean'], all_mean_data['y_pred_mean'])  # r2_score would give error if there was a NaN.
+                    plt.figure()
+                    plt.title(nice_str_dict[my_NN_cases[case_idx]['anem_to_test'][0]] + '.  $R^2='+ str(np.round(R2_of_means, 2))+'$')
+                    plt.scatter(X_test_dirs_nonnorm, y_test_nonnorm, s=0.01, alpha=0.2, c='black', label='Measured')
+                    plt.scatter(dir_sectors, y_test_mean, s=3, alpha=0.8, c='dodgerblue', label='Measured mean')
+                    plt.scatter(dir_sectors, y_pred_mean, s=3, alpha=0.8, c='darkorange', label='Predicted mean')
+                    plt.legend(markerscale=2., loc=1)
+                    plt.ylabel('$I_u$')
+                    plt.xlabel('Wind from direction [\N{DEGREE SIGN}]')
+                    plt.xlim([0, 360])
+                    plt.ylim([0, 0.8])
+                    plt.savefig(os.path.join(os.getcwd(), 'plots', f'{case_idx}_predicted_means_{y_data_type}_{anem_to_test[0]}_Umin_{U_min}_Rough-{str(add_roughness_input)[0]}_Weather-{str(input_weather_data)[0]}_1Profile-{str(only_1_elevation_profile)[0]}_Sector-{dir_sector_amp}_Avg-{str(do_sector_avg)[0]}.png'))
+                    # plt.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

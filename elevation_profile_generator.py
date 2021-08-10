@@ -85,7 +85,6 @@ def plot_elevation_profile(point_1, point_2, step_distance, list_of_distances):
     plt.savefig('plots/TerrainProfile_2_example.png')
     plt.show()
 
-
     plt.figure(dpi=400, figsize=(5,1.8))
     plt.title('R vector example')
     plt.scatter(new_dists[new_sea_idxs], np.zeros(len(new_sea_idxs)), c='black', s=2, label='Ground')  # c='peru')
