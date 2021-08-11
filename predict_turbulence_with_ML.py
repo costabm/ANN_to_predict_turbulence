@@ -33,6 +33,31 @@ import optuna
 from elevation_profile_generator import elevation_profile_generator, plot_elevation_profile, get_point2_from_point1_dir_and_dist
 from sklearn.metrics import r2_score
 
+# print('sleepin')
+# import time
+# time.sleep((1.5+4)*60*60)
+
+class LogCoshLoss(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+    def forward(self, y_t, y_prime_t):
+        ey_t = y_t - y_prime_t
+        return torch.mean(torch.log(torch.cosh(ey_t + 1e-12)))
+
+# TRASH
+# def convert_angle_to_0_2pi_interval(angle):
+#     new_angle = np.arctan2(np.sin(angle), np.cos(angle))
+#     if new_angle < 0:
+#         new_angle = abs(new_angle) + 2 * (np.pi - abs(new_angle))
+#     return new_angle
+
+
+def convert_angle_to_0_2pi_interval(angle, input_and_output_in_degrees=True):
+    if input_and_output_in_degrees:
+        return angle % 360
+    else:
+        return angle % (2*np.pi)
+
 
 def density_scatter(x , y, ax = None, sort = True, bins = 20, **kwargs )   :
     """
@@ -97,13 +122,6 @@ def plot_topography_per_anem(list_of_degs = list(range(360)), list_of_distances=
     return None
 
 plot_topography_per_anem(list_of_degs = list(range(360)), list_of_distances=[i*(5.+5.*i) for i in range(45)])
-
-
-def convert_angle_to_0_2pi_interval(angle, input_and_output_in_degrees=True):
-    if input_and_output_in_degrees:
-        return angle % 360
-    else:
-        return angle % (2*np.pi)
 
 
 def get_heights_from_X_dirs_and_dists(point_1, array_of_dirs, cone_angles, dists):
@@ -375,6 +393,18 @@ for input_weather_data, input_wind_data in [(True, True)]:  # , (False, False)]:
             # ##################################################################
 
             ##################################################################
+            # Converting X_dirs into cos(X_dirs) and sin(X_dirts) for the ANN to understand directions better (note that 359 deg is almost the same as 1 deg)
+            dirs_idx = 4 if input_weather_data else 1
+            if input_weather_data:
+                X_data_nonnorm[:,2] = X_data_nonnorm[:,3]  # passing U to the idx 2
+                X_data_nonnorm[:,3] = np.cos(np.deg2rad(X_data_nonnorm[:,4]))
+                X_data_nonnorm[:,4] = np.sin(np.deg2rad(X_data_nonnorm[:,4]))
+                print('Tair-Tsea is being overwritten with cos(dir). Dir is being overwritten with sin(dir)')
+                print('Final shape of X data: Tair, Tsea, U, cos(dir), sin(dir), Z1 Z2..., R1 R2...')
+            else:
+                print('ATTENTION: Cos(dir) and Sin(dir) is NOT IMPLEMENTED when input_weather_data is False')
+
+            ##################################################################
             # Organizing all the data in a dataframe
             all_data = pd.concat([pd.DataFrame(X_data_nonnorm), pd.DataFrame(y_data_nonnorm), pd.DataFrame(y_PDF_data_nonnorm)], axis=1)
             aux_ones = np.zeros(n_samples)  # auxiliary variable with zeros
@@ -394,8 +424,10 @@ for input_weather_data, input_wind_data in [(True, True)]:  # , (False, False)]:
             n_samples = X_data_nonnorm.shape[0]
             start_idxs_of_each_anem_2 = np.array(start_idxs_of_each_anem.tolist() + [n_samples])  # this one includes the final index as well
 
-            dirs_idx = 4 if input_weather_data else 1
-            X_dirs = copy.deepcopy(X_data_nonnorm[:,dirs_idx])
+
+            # X_dirs = copy.deepcopy(X_data_nonnorm[:,dirs_idx])
+            X_dirs = np.rad2deg([convert_angle_to_0_2pi_interval(i) for i in np.arctan2(X_data_nonnorm[:,4], X_data_nonnorm[:,3])])
+
             X_dir_sectors = np.searchsorted(dir_sectors, X_dirs, side='right') - 1  # groups all the measured directions into sectors
 
             ##################################################################
@@ -504,9 +536,10 @@ for input_weather_data, input_wind_data in [(True, True)]:  # , (False, False)]:
             ########################################
             # Neural network
             device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')  # 'cuda' or 'cpu'. 'cuda' doesn't seem to be working...
-            def train_and_test_NN(X_train, y_train, X_test, y_test, hp, print_loss_per_epoch=True, print_results=True):
+            def train_and_test_NN(X_train, y_train, X_test, y_test, hp, print_loss_per_epoch=True, print_results=True, R2_of='values'):
                 """
                 Args:
+                    R2_of:
                     X_train:
                     y_train:
                     X_test:
@@ -564,13 +597,25 @@ for input_weather_data, input_wind_data in [(True, True)]:  # , (False, False)]:
                 n_samples_test = X_test.shape[0]
                 with torch.no_grad():
                     y_pred = my_nn(Variable(X_test))
-                    y_test_mean = torch.mean(y_test.view(n_samples_test,n_outputs), axis=0)
+                if R2_of == 'values':
+                    y_test_total_mean = torch.mean(y_test.view(n_samples_test, n_outputs), axis=0)
                     SS_res_test = torch.sum((y_test.view(n_samples_test,n_outputs) - y_pred.view(n_samples_test,n_outputs))**2)
-                    SS_tot_test = torch.sum((y_test.view(n_samples_test,n_outputs) - y_test_mean)**2)
+                    SS_tot_test = torch.sum((y_test.view(n_samples_test,n_outputs) - y_test_total_mean)**2)
                     R2_test = 1 - SS_res_test / SS_tot_test
-                idxs_to_print = np.random.randint(0, len(y_pred), 10)  # a few random values to be printed
+                    idxs_to_print = np.random.randint(0, len(y_pred), 10)  # a few random values to be printed
+                elif R2_of == 'means':
+                    X_test_cos_dir = X_test[:, 3] * (X_maxs[3] - X_mins[3]) + X_mins[3]
+                    X_test_sin_dir = X_test[:, 4] * (X_maxs[4] - X_mins[4]) + X_mins[4]
+                    X_test_dirs = convert_angle_to_0_2pi_interval(torch.atan2(X_test_sin_dir, X_test_cos_dir), input_and_output_in_degrees=False)
+                    X_dir_sectors = np.searchsorted(dir_sectors, torch.rad2deg(X_test_dirs).cpu().numpy(), side='right') - 1  # groups all the measured directions into sectors
+                    y_test_mean = np.array([np.mean(y_test.cpu().numpy()[np.where(X_dir_sectors == d)[0]]) for d in dir_sectors])
+                    y_pred_mean = np.array([np.mean(y_pred.cpu().numpy()[np.where(X_dir_sectors == d)[0]]) for d in dir_sectors])
+                    # Removing NaN from the data after organizing it into a dataframe
+                    all_mean_data = pd.DataFrame({'dir_sectors':dir_sectors, 'y_test_mean':y_test_mean, 'y_pred_mean':y_pred_mean}).dropna(axis=0, how='any').reset_index(drop=True)
+                    R2_test = r2_score(all_mean_data['y_test_mean'], all_mean_data['y_pred_mean'])  # r2_score would give error if there was a NaN.
+                    raise ValueError
                 if print_results:
-                    print(f'R2 on test dataset ----> {R2_test} <---- . Learning rate: {learn_rate}')
+                    print(f'R2 (of {R2_of}!) on test dataset: ----> {R2_test} <---- . Learning rate: {learn_rate}')
                     print(f"Prediction: {y_pred[idxs_to_print]}")
                     print(f"Reference:   {y_test[idxs_to_print]}")
                     print(f'Batch size: {batch_size}')
@@ -643,9 +688,16 @@ for input_weather_data, input_wind_data in [(True, True)]:  # , (False, False)]:
             # n_hid_layers = 2
             # n_epochs = 25
             # momentum = 0.9
-            activation_fun = torch.nn.modules.activation.ELU
+            # activation_fun = torch.nn.modules.activation.ELU
+            activation_fun_dict = {'ReLU': torch.nn.modules.activation.ReLU,
+                                   'ELU': torch.nn.modules.activation.ELU,
+                                   'LeakyReLU': torch.nn.modules.activation.LeakyReLU}
+            loss_fun_dict = {'SmoothL1Loss': SmoothL1Loss(),
+                             'MSELoss': MSELoss(),
+                             'L1Loss': L1Loss(),
+                             'LogCoshLoss': LogCoshLoss()}
 
-            def find_optimal_hp_for_each_of_my_cases(my_NN_cases, X_data, y_data, n_trials, print_loss_per_epoch=False, print_results=False):
+            def find_optimal_hp_for_each_of_my_cases(my_NN_cases, X_data, y_data, n_trials, print_loss_per_epoch=False, print_results=False, optimize_R2_of='values'):
                 hp_opt_results = []
                 for my_NN_case in my_NN_cases:
                     anem_to_train = my_NN_case['anem_to_train']
@@ -654,11 +706,14 @@ for input_weather_data, input_wind_data in [(True, True)]:  # , (False, False)]:
                     # Beautiful MAGIC happening
                     def hp_opt_objective(trial):
                         weight_decay = trial.suggest_float("weight_decay", 1E-7, 1E-2, log=True)
-                        lr =           trial.suggest_float("lr",          0.01, 0.5, log=True)
+                        lr =           trial.suggest_float("lr",          0.01/2, 0.5, log=True)
                         momentum = trial.suggest_float("momentum", 0., 0.95)
-                        n_hid_layers = trial.suggest_int('n_hid_layers', 2, 4)
+                        n_hid_layers = trial.suggest_int('n_hid_layers', 2, 6)
                         n_epochs = trial.suggest_int('n_epochs', 5, 50)
-
+                        activation_fun_name = trial.suggest_categorical('activation', list(activation_fun_dict))
+                        activation_fun = activation_fun_dict[activation_fun_name]
+                        loss_fun_name = trial.suggest_categorical('loss', list(loss_fun_dict))
+                        loss_fun = loss_fun_dict[loss_fun_name]
                         hp = {'lr': lr,
                               'batch_size': batch_size,
                               'weight_decay': weight_decay,
@@ -666,8 +721,8 @@ for input_weather_data, input_wind_data in [(True, True)]:  # , (False, False)]:
                               'n_epochs': n_epochs,
                               'n_hid_layers': n_hid_layers,
                               'activation': activation_fun,
-                              'loss': MSELoss()}
-                        _, R2 = train_and_test_NN(X_train, y_train, X_test, y_test, hp=hp, print_loss_per_epoch=print_loss_per_epoch, print_results=print_results)
+                              'loss': loss_fun}
+                        _, R2 = train_and_test_NN(X_train, y_train, X_test, y_test, hp=hp, print_loss_per_epoch=print_loss_per_epoch, print_results=print_results, R2_of=optimize_R2_of)
                         return R2
                     study = optuna.create_study(direction='maximize')
                     study.optimize(hp_opt_objective, n_trials=n_trials)
@@ -675,18 +730,18 @@ for input_weather_data, input_wind_data in [(True, True)]:  # , (False, False)]:
                     hp_opt_results.append(hp_opt_result)
                 return hp_opt_results
 
-            my_NN_cases = [{'anem_to_train': ['osp2_A', 'synn_A', 'svar_A', 'land_A', 'neso_A'],
+            my_NN_cases = [#{'anem_to_train': ['osp1_A', 'synn_A', 'svar_A', 'neso_A'],  # 'osp2_A', REMOVED!!
+                           # 'anem_to_test': ['land_A']},
+                           {'anem_to_train': ['osp1_A', 'osp2_A', 'synn_A', 'svar_A', 'land_A'],
+                            'anem_to_test': ['neso_A']},
+                           {'anem_to_train': ['osp2_A', 'synn_A', 'svar_A', 'land_A', 'neso_A'],
                             'anem_to_test': ['osp1_A']},
                            {'anem_to_train': ['synn_A', 'svar_A', 'land_A', 'neso_A'],
                             'anem_to_test': ['osp1_A']},
                            {'anem_to_train': ['osp1_A', 'osp2_A', 'svar_A', 'land_A', 'neso_A'],
                             'anem_to_test': ['synn_A']},
                            {'anem_to_train': ['osp1_A', 'osp2_A', 'synn_A', 'land_A', 'neso_A'],
-                            'anem_to_test': ['svar_A']},
-                           {'anem_to_train': ['osp1_A', 'osp2_A', 'synn_A', 'svar_A', 'neso_A'],
-                            'anem_to_test': ['land_A']},
-                           {'anem_to_train': ['osp1_A', 'osp2_A', 'synn_A', 'svar_A', 'land_A'],
-                            'anem_to_test': ['neso_A']}]
+                            'anem_to_test': ['svar_A']}]
 
 
             # my_NN_cases = [{'anem_to_train':['osp2_A', 'osp2_B', 'svar_A', 'neso_A'],
@@ -716,15 +771,14 @@ for input_weather_data, input_wind_data in [(True, True)]:  # , (False, False)]:
             # X_data = np.delete(X_data, 1, axis=1) # NOT WORKING FOR THE BEAUTIFUL PLOTS THAT WILL REQUIRE THESE VALUES
             # X_data = np.random.uniform(0,1,size=X_data_backup.shape)
 
-            n_trials = 500
-
+            n_trials = 1
 
             if do_sector_avg:
                 # y_PDF_data
                 hp_opt_results_PDF  = find_optimal_hp_for_each_of_my_cases(my_NN_cases, X_data=X_data, y_data=y_PDF_data, n_trials=n_trials)
             else:
                 # y_data
-                hp_opt_results = find_optimal_hp_for_each_of_my_cases(my_NN_cases, X_data=X_data, y_data=y_data[:,None], n_trials=n_trials)
+                hp_opt_results = find_optimal_hp_for_each_of_my_cases(my_NN_cases, X_data=X_data, y_data=y_data[:,None], n_trials=n_trials, optimize_R2_of='means')
 
             for case_idx in range(len(my_NN_cases)):
                 my_NN_case = my_NN_cases[case_idx]
@@ -732,11 +786,11 @@ for input_weather_data, input_wind_data in [(True, True)]:  # , (False, False)]:
                 anem_to_test = my_NN_case['anem_to_test']
                 if do_sector_avg:
                     hp_PDF = hp_opt_results_PDF[case_idx]['best_params']
-                    hp_PDF['activation'] = activation_fun
+                    hp['activation'] = activation_fun_dict[hp['activation']]
                     # hp_PDF['momentum'] = momentum
                     # hp_PDF['n_epochs'] = n_epochs
                     # hp_PDF['n_hid_layers'] = n_hid_layers
-                    hp_PDF['loss'] = MSELoss()
+                    # hp_PDF['loss'] = loss_fun_dict[hp['loss']]
                     X_train, y_train, X_test, y_test, batch_size = get_X_y_train_and_test_and_batch_size_from_anems(anem_to_train, anem_to_test, all_anem_list, X_data, y_PDF_data, batch_size_desired=15000, batch_size_lims=[5000,30000])
                     hp_PDF['batch_size'] = batch_size
                     if not input_wind_data:
@@ -749,18 +803,24 @@ for input_weather_data, input_wind_data in [(True, True)]:  # , (False, False)]:
                     n_features = X_data_nonnorm.shape[1]
                 else:
                     hp = hp_opt_results[case_idx]['best_params']
-                    hp['activation'] = activation_fun
+                    hp['activation'] = activation_fun_dict[hp['activation']]
                     # hp['momentum'] = momentum
                     # hp['n_epochs'] = n_epochs
                     # hp['n_hid_layers'] = n_hid_layers
-                    hp['loss'] = MSELoss()
+                    hp['loss'] = loss_fun_dict[hp['loss']]
                     X_train, y_train, X_test, y_test, batch_size = get_X_y_train_and_test_and_batch_size_from_anems(anem_to_train, anem_to_test, all_anem_list, X_data, y_data[:,None], batch_size_desired=15000, batch_size_lims=[5000,30000])
                     hp['batch_size'] = batch_size
                     y_pred, R2 = train_and_test_NN(X_train, y_train, X_test, y_test, hp=hp, print_loss_per_epoch=True, print_results=True)
 
                 # PLOT PREDICTIONS
                 nice_str_dict = {'osp1_A':'Ospøya 1', 'osp2_A':'Ospøya 2', 'synn_A':'Synnøytangen', 'svar_A':'Svarvhelleholmen', 'land_A':'Landrøypynten', 'neso_A':'Nesøya'}
-                X_test_dirs_nonnorm = X_test[:, dirs_idx].cpu().numpy() * (X_maxs[dirs_idx] - X_mins[dirs_idx]) + X_mins[dirs_idx]
+                # # Old:
+                # X_test_dirs_nonnorm = X_test[:, dirs_idx].cpu().numpy() * (X_maxs[dirs_idx] - X_mins[dirs_idx]) + X_mins[dirs_idx]
+                # New:
+                X_test_cos_dir = X_test[:, 3].cpu().numpy() * (X_maxs[3] - X_mins[3]) + X_mins[3]
+                X_test_sin_dir = X_test[:, 4].cpu().numpy() * (X_maxs[4] - X_mins[4]) + X_mins[4]
+                X_test_dirs_nonnorm = np.rad2deg([convert_angle_to_0_2pi_interval(i, input_and_output_in_degrees=False) for i in np.arctan2(X_test_sin_dir, X_test_cos_dir)])
+
                 y_test_nonnorm = y_test.cpu().numpy() * (y_max - y_min) + y_min
                 anem_idx = np.where(all_anem_list == my_NN_cases[case_idx]['anem_to_test'][0])[0][0]
                 anem_slice = slice(start_idxs_of_each_anem_2[anem_idx], start_idxs_of_each_anem_2[anem_idx + 1])
@@ -779,8 +839,9 @@ for input_weather_data, input_wind_data in [(True, True)]:  # , (False, False)]:
                 plt.ylabel('$I_u$')
                 plt.xlabel('Wind from direction [\N{DEGREE SIGN}]')
                 plt.xlim([0, 360])
+                plt.xticks([0, 45, 90, 135, 180, 225, 270, 315, 360])
                 plt.ylim([0, 0.8])
-                plt.savefig(os.path.join(os.getcwd(), 'plots', f'{case_idx}_predicted_{y_data_type}_{anem_to_test[0]}_Umin_{U_min}_Rough-{str(add_roughness_input)[0]}_Weather-{str(input_weather_data)[0]}_1Profile-{str(only_1_elevation_profile)[0]}_Sector-{dir_sector_amp}_Avg-{str(do_sector_avg)[0]}.png'))
+                plt.savefig(os.path.join(os.getcwd(), 'plots', f'{case_idx}_{y_data_type}_{anem_to_test[0]}_Umin_{U_min}_Rough-{str(add_roughness_input)[0]}_Weather-{str(input_weather_data)[0]}_1Profile-{str(only_1_elevation_profile)[0]}_Sector-{dir_sector_amp}_Avg-{str(do_sector_avg)[0]}.png'))
                 # plt.show()
 
                 # PLOT MEANS OF PREDICTIONS
@@ -801,8 +862,9 @@ for input_weather_data, input_wind_data in [(True, True)]:  # , (False, False)]:
                     plt.ylabel('$I_u$')
                     plt.xlabel('Wind from direction [\N{DEGREE SIGN}]')
                     plt.xlim([0, 360])
+                    plt.xticks([0,45,90,135,180,225,270,315,360])
                     plt.ylim([0, 0.8])
-                    plt.savefig(os.path.join(os.getcwd(), 'plots', f'{case_idx}_predicted_means_{y_data_type}_{anem_to_test[0]}_Umin_{U_min}_Rough-{str(add_roughness_input)[0]}_Weather-{str(input_weather_data)[0]}_1Profile-{str(only_1_elevation_profile)[0]}_Sector-{dir_sector_amp}_Avg-{str(do_sector_avg)[0]}.png'))
+                    plt.savefig(os.path.join(os.getcwd(), 'plots', f'{case_idx}_mean_{y_data_type}_{anem_to_test[0]}_Umin_{U_min}_Rough-{str(add_roughness_input)[0]}_Weather-{str(input_weather_data)[0]}_1Profile-{str(only_1_elevation_profile)[0]}_Sector-{dir_sector_amp}_Avg-{str(do_sector_avg)[0]}.png'))
                     # plt.show()
 
 
