@@ -613,7 +613,6 @@ for input_weather_data, input_wind_data in [(True, True)]:  # , (False, False)]:
                     # Removing NaN from the data after organizing it into a dataframe
                     all_mean_data = pd.DataFrame({'dir_sectors':dir_sectors, 'y_test_mean':y_test_mean, 'y_pred_mean':y_pred_mean}).dropna(axis=0, how='any').reset_index(drop=True)
                     R2_test = r2_score(all_mean_data['y_test_mean'], all_mean_data['y_pred_mean'])  # r2_score would give error if there was a NaN.
-                    raise ValueError
                 if print_results:
                     print(f'R2 (of {R2_of}!) on test dataset: ----> {R2_test} <---- . Learning rate: {learn_rate}')
                     print(f"Prediction: {y_pred[idxs_to_print]}")
@@ -730,8 +729,8 @@ for input_weather_data, input_wind_data in [(True, True)]:  # , (False, False)]:
                     hp_opt_results.append(hp_opt_result)
                 return hp_opt_results
 
-            my_NN_cases = [#{'anem_to_train': ['osp1_A', 'synn_A', 'svar_A', 'neso_A'],  # 'osp2_A', REMOVED!!
-                           # 'anem_to_test': ['land_A']},
+            my_NN_cases = [{'anem_to_train': ['osp1_A', 'osp2_A', 'synn_A', 'svar_A', 'neso_A'],
+                            'anem_to_test': ['land_A']},
                            {'anem_to_train': ['osp1_A', 'osp2_A', 'synn_A', 'svar_A', 'land_A'],
                             'anem_to_test': ['neso_A']},
                            {'anem_to_train': ['osp2_A', 'synn_A', 'svar_A', 'land_A', 'neso_A'],
@@ -771,7 +770,7 @@ for input_weather_data, input_wind_data in [(True, True)]:  # , (False, False)]:
             # X_data = np.delete(X_data, 1, axis=1) # NOT WORKING FOR THE BEAUTIFUL PLOTS THAT WILL REQUIRE THESE VALUES
             # X_data = np.random.uniform(0,1,size=X_data_backup.shape)
 
-            n_trials = 1
+            n_trials = 150
 
             if do_sector_avg:
                 # y_PDF_data
