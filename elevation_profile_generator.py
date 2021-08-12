@@ -92,6 +92,8 @@ def plot_elevation_profile(point_1, point_2, step_distance, list_of_distances):
     plt.xlabel('Distance upstream [m]')
     plt.ylabel('Norm. roughness')
     plt.yticks([0,1])
+    ax = plt.gca()
+    ax.set_yticklabels(['   0', '   1'])
     plt.tight_layout()
     plt.savefig('plots/TerrainProfile_3_example.png')
     plt.show()

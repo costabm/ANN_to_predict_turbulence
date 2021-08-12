@@ -33,9 +33,8 @@ import optuna
 from elevation_profile_generator import elevation_profile_generator, plot_elevation_profile, get_point2_from_point1_dir_and_dist
 from sklearn.metrics import r2_score
 
-# print('sleepin')
-# import time
-# time.sleep((1.5+4)*60*60)
+print('Osp2_B is now being attempted, instead of Osp1_A')
+nice_str_dict = {'osp1_A': 'Ospøya 1', 'osp2_A': 'Ospøya 2', 'osp2_B': 'Ospøya 2', 'synn_A': 'Synnøytangen', 'svar_A': 'Svarvhelleholmen', 'land_A': 'Landrøypynten', 'neso_A': 'Nesøya'}
 
 class LogCoshLoss(torch.nn.Module):
     def __init__(self):
@@ -43,13 +42,6 @@ class LogCoshLoss(torch.nn.Module):
     def forward(self, y_t, y_prime_t):
         ey_t = y_t - y_prime_t
         return torch.mean(torch.log(torch.cosh(ey_t + 1e-12)))
-
-# TRASH
-# def convert_angle_to_0_2pi_interval(angle):
-#     new_angle = np.arctan2(np.sin(angle), np.cos(angle))
-#     if new_angle < 0:
-#         new_angle = abs(new_angle) + 2 * (np.pi - abs(new_angle))
-#     return new_angle
 
 
 def convert_angle_to_0_2pi_interval(angle, input_and_output_in_degrees=True):
@@ -85,7 +77,7 @@ def density_scatter(x , y, ax = None, sort = True, bins = 20, **kwargs )   :
     return ax, np.min(z), np.max(z)
 
 
-def test_elevation_profile_at_given_point_dir_dist(point_1=[-34625., 6700051.], direction_deg=160, step_distance=False, total_distance=False,
+def example_of_elevation_profile_at_given_point_dir_dist(point_1=[-34625., 6700051.], direction_deg=160, step_distance=False, total_distance=False,
                                                    list_of_distances=[i*(5.+5.*i) for i in range(45)], plot=True):
     point_2 = get_point2_from_point1_dir_and_dist(point_1=point_1, direction_deg=direction_deg, distance=list_of_distances[-1] if list_of_distances else total_distance)
     dists, heights = elevation_profile_generator(point_1=point_1, point_2=point_2, step_distance=step_distance, list_of_distances=list_of_distances)
@@ -93,6 +85,8 @@ def test_elevation_profile_at_given_point_dir_dist(point_1=[-34625., 6700051.], 
         plot_elevation_profile(point_1=point_1, point_2=point_2, step_distance=step_distance, list_of_distances=list_of_distances)
     return dists, heights
 
+# example_of_elevation_profile_at_given_point_dir_dist(point_1=[-34625., 6700051.], direction_deg=160, step_distance=False, total_distance=False,
+#                                                    list_of_distances=[i*(5.+5.*i) for i in range(45)], plot=True)
 
 def plot_topography_per_anem(list_of_degs = list(range(360)), list_of_distances=[i*(5.+5.*i) for i in range(45)]):
     from orography import synn_EN_33, svar_EN_33, osp1_EN_33, osp2_EN_33, land_EN_33, neso_EN_33
@@ -102,7 +96,7 @@ def plot_topography_per_anem(list_of_degs = list(range(360)), list_of_distances=
         heights_all_dirs = []
         degs = []
         for d in list_of_degs:
-            dists, heights = test_elevation_profile_at_given_point_dir_dist(point_1=anem_coor, direction_deg=d, step_distance=False, total_distance=False, list_of_distances=list_of_distances, plot=False)
+            dists, heights = example_of_elevation_profile_at_given_point_dir_dist(point_1=anem_coor, direction_deg=d, step_distance=False, total_distance=False, list_of_distances=list_of_distances, plot=False)
             dists_all_dirs.append(dists)
             heights_all_dirs.append(heights)
             degs.append(d)
@@ -111,17 +105,27 @@ def plot_topography_per_anem(list_of_degs = list(range(360)), list_of_distances=
         heights_all_dirs = np.array(heights_all_dirs)
         cmap = copy.copy(plt.get_cmap('magma_r'))
         heights_all_dirs = np.ma.masked_where(heights_all_dirs == 0, heights_all_dirs)  # set mask where height is 0, to be converted to another color
-        plt.figure(dpi=500)
-        plt.gca().patch.set_color('skyblue')
-        plt.title(anem)
-        # plt.contourf(degs, dists_all_dirs[0], heights_all_dirs.T, levels=np.linspace(0,800,100), cmap=cmap)
-        plt.pcolormesh(degs, dists_all_dirs[0], heights_all_dirs.T, cmap=cmap, shading='auto', vmin = 0., vmax = 800.)
-        plt.colorbar()
+
+        fig, (ax, cax) = plt.subplots(nrows=2, figsize=(5.5,2.3+0.5), dpi=400,
+                                      gridspec_kw={"height_ratios": [1, 0.05]})
+        im = ax.pcolormesh(degs, dists_all_dirs[0], heights_all_dirs.T, cmap=cmap, shading='auto', vmin = 0., vmax = 800.)
+        ax.set_title(nice_str_dict[anem+'_A']+': '+'Upstream topography;')
+        ax.patch.set_color('skyblue')
+        ax.set_xticks([0, 45, 90, 135, 180, 225, 270, 315, 360])
+        ax.set_xticklabels(['0(N)', '45', '90(E)', '135', '180(S)', '225', '270(W)', '315', '360'])
+        ax.set_yticks([0,2000,4000,6000,8000,10000])
+        ax.set_yticklabels([0,2,4,6,8,10])
+        ax.set_xlabel('Wind from direction [\N{DEGREE SIGN}]')
+        ax.set_ylabel('Upstream distance [km]')
+        cax.set_xlabel('test')
+        cbar = fig.colorbar(im, cax=cax, orientation="horizontal")
+        cbar.set_label('Height above sea level [m]')
+        plt.tight_layout(pad=0.05)
         plt.savefig(os.path.join(os.getcwd(), 'plots', f'Topography_per_anem-{anem}.png'))
         plt.show()
     return None
 
-plot_topography_per_anem(list_of_degs = list(range(360)), list_of_distances=[i*(5.+5.*i) for i in range(45)])
+# plot_topography_per_anem(list_of_degs = list(range(360)), list_of_distances=[i*(5.+5.*i) for i in range(45)])
 
 
 def get_heights_from_X_dirs_and_dists(point_1, array_of_dirs, cone_angles, dists):
@@ -704,9 +708,9 @@ for input_weather_data, input_wind_data in [(True, True)]:  # , (False, False)]:
                     X_train, y_train, X_test, y_test, batch_size = get_X_y_train_and_test_and_batch_size_from_anems(anem_to_train, anem_to_test, all_anem_list, X_data, y_data)
                     # Beautiful MAGIC happening
                     def hp_opt_objective(trial):
-                        weight_decay = trial.suggest_float("weight_decay", 1E-7, 1E-2, log=True)
-                        lr =           trial.suggest_float("lr",          0.01/2, 0.5, log=True)
-                        momentum = trial.suggest_float("momentum", 0., 0.95)
+                        weight_decay = trial.suggest_float("weight_decay", 1E-7, 1E-1, log=True)
+                        lr =           trial.suggest_float("lr",          0.001, 0.8, log=True)
+                        momentum = trial.suggest_float("momentum", 0., 0.98)
                         n_hid_layers = trial.suggest_int('n_hid_layers', 2, 6)
                         n_epochs = trial.suggest_int('n_epochs', 5, 50)
                         activation_fun_name = trial.suggest_categorical('activation', list(activation_fun_dict))
@@ -729,32 +733,22 @@ for input_weather_data, input_wind_data in [(True, True)]:  # , (False, False)]:
                     hp_opt_results.append(hp_opt_result)
                 return hp_opt_results
 
-            my_NN_cases = [{'anem_to_train': ['osp1_A', 'osp2_A', 'synn_A', 'svar_A', 'neso_A'],
+            my_NN_cases = [{'anem_to_train': ['osp1_A', 'osp2_B', 'synn_A', 'svar_A', 'neso_A'],
                             'anem_to_test': ['land_A']},
-                           {'anem_to_train': ['osp1_A', 'osp2_A', 'synn_A', 'svar_A', 'land_A'],
+                           {'anem_to_train': ['osp1_A', 'osp2_B', 'synn_A', 'svar_A', 'land_A'],
                             'anem_to_test': ['neso_A']},
-                           {'anem_to_train': ['osp2_A', 'synn_A', 'svar_A', 'land_A', 'neso_A'],
+                           {'anem_to_train': ['osp2_B', 'synn_A', 'svar_A', 'land_A', 'neso_A'],
                             'anem_to_test': ['osp1_A']},
                            {'anem_to_train': ['synn_A', 'svar_A', 'land_A', 'neso_A'],
-                            'anem_to_test': ['osp1_A']},
-                           {'anem_to_train': ['osp1_A', 'osp2_A', 'svar_A', 'land_A', 'neso_A'],
+                            'anem_to_test': ['osp2_B']},
+                           {'anem_to_train': ['osp1_A', 'osp2_B', 'svar_A', 'land_A', 'neso_A'],
                             'anem_to_test': ['synn_A']},
-                           {'anem_to_train': ['osp1_A', 'osp2_A', 'synn_A', 'land_A', 'neso_A'],
-                            'anem_to_test': ['svar_A']}]
+                           {'anem_to_train': ['osp1_A', 'osp2_B', 'synn_A', 'land_A', 'neso_A'],
+                            'anem_to_test': ['svar_A']}
+                          ]
 
 
-            # my_NN_cases = [{'anem_to_train':['osp2_A', 'osp2_B', 'svar_A', 'neso_A'],
-            #                 'anem_to_test': ['osp1_A']},
-            #                {'anem_to_train':['svar_A', 'neso_A'],
-            #                 'anem_to_test': ['osp1_A']},
-            #                {'anem_to_train': ['osp1_A', 'osp2_A', 'neso_A'],
-            #                 'anem_to_test': ['svar_A']},
-            #                {'anem_to_train': ['osp1_A', 'osp2_A', 'svar_A'],
-            #                 'anem_to_test': ['neso_A']}]
 
-            #
-            # my_NN_cases = [{'anem_to_train': ['osp1_A', 'osp2_A', 'synn_A', 'svar_A', 'land_A'],
-            #                 'anem_to_test': ['neso_A']}]
 
             # # Testing trivial case. Normalization is important!
             # test_X_data = np.array([np.arange(1000000), np.arange(1000000), np.arange(1000000)]).T/1000000   * 10 - 9
@@ -770,14 +764,22 @@ for input_weather_data, input_wind_data in [(True, True)]:  # , (False, False)]:
             # X_data = np.delete(X_data, 1, axis=1) # NOT WORKING FOR THE BEAUTIFUL PLOTS THAT WILL REQUIRE THESE VALUES
             # X_data = np.random.uniform(0,1,size=X_data_backup.shape)
 
-            n_trials = 150
+            n_trials = 400
 
             if do_sector_avg:
                 # y_PDF_data
                 hp_opt_results_PDF  = find_optimal_hp_for_each_of_my_cases(my_NN_cases, X_data=X_data, y_data=y_PDF_data, n_trials=n_trials)
             else:
                 # y_data
-                hp_opt_results = find_optimal_hp_for_each_of_my_cases(my_NN_cases, X_data=X_data, y_data=y_data[:,None], n_trials=n_trials, optimize_R2_of='means')
+                while True:
+                    try:  # because now and then the ANN produces an error (e.g. weights explode during learning)
+                        hp_opt_results = find_optimal_hp_for_each_of_my_cases(my_NN_cases, X_data=X_data, y_data=y_data[:, None], n_trials=n_trials, optimize_R2_of='means')
+                    except ValueError:
+                        continue
+                    break
+
+            with open('hp_opt_results.txt', 'w') as file:
+                file.write(json.dumps(str(hp_opt_results)))  # use `json.loads` to do the reverse
 
             for case_idx in range(len(my_NN_cases)):
                 my_NN_case = my_NN_cases[case_idx]
@@ -786,10 +788,6 @@ for input_weather_data, input_wind_data in [(True, True)]:  # , (False, False)]:
                 if do_sector_avg:
                     hp_PDF = hp_opt_results_PDF[case_idx]['best_params']
                     hp['activation'] = activation_fun_dict[hp['activation']]
-                    # hp_PDF['momentum'] = momentum
-                    # hp_PDF['n_epochs'] = n_epochs
-                    # hp_PDF['n_hid_layers'] = n_hid_layers
-                    # hp_PDF['loss'] = loss_fun_dict[hp['loss']]
                     X_train, y_train, X_test, y_test, batch_size = get_X_y_train_and_test_and_batch_size_from_anems(anem_to_train, anem_to_test, all_anem_list, X_data, y_PDF_data, batch_size_desired=15000, batch_size_lims=[5000,30000])
                     hp_PDF['batch_size'] = batch_size
                     if not input_wind_data:
@@ -802,29 +800,27 @@ for input_weather_data, input_wind_data in [(True, True)]:  # , (False, False)]:
                     n_features = X_data_nonnorm.shape[1]
                 else:
                     hp = hp_opt_results[case_idx]['best_params']
-                    hp['activation'] = activation_fun_dict[hp['activation']]
-                    # hp['momentum'] = momentum
-                    # hp['n_epochs'] = n_epochs
-                    # hp['n_hid_layers'] = n_hid_layers
-                    hp['loss'] = loss_fun_dict[hp['loss']]
+                    if type(hp['activation']) == str:
+                        hp['activation'] = activation_fun_dict[hp['activation']]
+                        hp['loss'] = loss_fun_dict[hp['loss']]
                     X_train, y_train, X_test, y_test, batch_size = get_X_y_train_and_test_and_batch_size_from_anems(anem_to_train, anem_to_test, all_anem_list, X_data, y_data[:,None], batch_size_desired=15000, batch_size_lims=[5000,30000])
                     hp['batch_size'] = batch_size
                     y_pred, R2 = train_and_test_NN(X_train, y_train, X_test, y_test, hp=hp, print_loss_per_epoch=True, print_results=True)
 
                 # PLOT PREDICTIONS
-                nice_str_dict = {'osp1_A':'Ospøya 1', 'osp2_A':'Ospøya 2', 'synn_A':'Synnøytangen', 'svar_A':'Svarvhelleholmen', 'land_A':'Landrøypynten', 'neso_A':'Nesøya'}
                 # # Old:
                 # X_test_dirs_nonnorm = X_test[:, dirs_idx].cpu().numpy() * (X_maxs[dirs_idx] - X_mins[dirs_idx]) + X_mins[dirs_idx]
                 # New:
                 X_test_cos_dir = X_test[:, 3].cpu().numpy() * (X_maxs[3] - X_mins[3]) + X_mins[3]
                 X_test_sin_dir = X_test[:, 4].cpu().numpy() * (X_maxs[4] - X_mins[4]) + X_mins[4]
                 X_test_dirs_nonnorm = np.rad2deg([convert_angle_to_0_2pi_interval(i, input_and_output_in_degrees=False) for i in np.arctan2(X_test_sin_dir, X_test_cos_dir)])
-
                 y_test_nonnorm = y_test.cpu().numpy() * (y_max - y_min) + y_min
                 anem_idx = np.where(all_anem_list == my_NN_cases[case_idx]['anem_to_test'][0])[0][0]
                 anem_slice = slice(start_idxs_of_each_anem_2[anem_idx], start_idxs_of_each_anem_2[anem_idx + 1])
-                plt.figure()
-                plt.title(nice_str_dict[my_NN_cases[case_idx]['anem_to_test'][0]] + '.  $R^2='+ str(np.round(R2.item(), 2))+'$')
+
+                plt.figure(figsize=(5.5,2.3), dpi=400)
+                # plt.title(nice_str_dict[my_NN_cases[case_idx]['anem_to_test'][0]] + '.  $R^2='+ str(np.round(R2.item(), 2))+'$')
+                plt.title('10-min values of $I_u$ ($R^2=' + str(np.round(R2.item(), 2)) + '$);')
                 ########## ATTENTION: I SHOULDN'T BE USING y_data, but instead y_test since one data point was removed to find a divisor for the batch size.
                 # CERTAIN TRASH: plt.scatter(X_dirs[anem_slice], y_data[anem_slice] * (y_max-y_min) + y_min, s=0.01, alpha=0.2, c='black', label='Measured')
                 # PERHAPS TRASH: plt.scatter(X_dirs[anem_slice], y_PDF_data[anem_slice] * (y_PDF_maxs-y_PDF_mins) + y_PDF_mins, s=0.01, alpha=0.2, c='blue', label='Measured Mean')
@@ -834,13 +830,16 @@ for input_weather_data, input_wind_data in [(True, True)]:  # , (False, False)]:
                 else:
                     y_pred_nonnorm = y_pred.cpu().numpy() * (y_max - y_min) + y_min
                     plt.scatter(X_test_dirs_nonnorm, y_pred_nonnorm, s=0.01, alpha=0.2, c='orange', label='Predicted')
-                plt.legend(markerscale=50., loc=1)
+                plt.legend(markerscale=30., loc=1)
                 plt.ylabel('$I_u$')
-                plt.xlabel('Wind from direction [\N{DEGREE SIGN}]')
+                # plt.xlabel('Wind from direction [\N{DEGREE SIGN}]')
                 plt.xlim([0, 360])
                 plt.xticks([0, 45, 90, 135, 180, 225, 270, 315, 360])
-                plt.ylim([0, 0.8])
-                plt.savefig(os.path.join(os.getcwd(), 'plots', f'{case_idx}_{y_data_type}_{anem_to_test[0]}_Umin_{U_min}_Rough-{str(add_roughness_input)[0]}_Weather-{str(input_weather_data)[0]}_1Profile-{str(only_1_elevation_profile)[0]}_Sector-{dir_sector_amp}_Avg-{str(do_sector_avg)[0]}.png'))
+                ax = plt.gca()
+                ax.set_xticklabels(['0(N)', '45', '90(E)', '135', '180(S)', '225', '270(W)', '315', '360'])
+                plt.ylim([0, 0.7])
+                plt.tight_layout(pad=0.05)
+                plt.savefig(os.path.join(os.getcwd(), 'plots', f'B_{case_idx}_{y_data_type}_{anem_to_test[0]}_Umin_{U_min}_Rough-{str(add_roughness_input)[0]}_Weather-{str(input_weather_data)[0]}_1Profile-{str(only_1_elevation_profile)[0]}_Sector-{dir_sector_amp}_Avg-{str(do_sector_avg)[0]}.png'))
                 # plt.show()
 
                 # PLOT MEANS OF PREDICTIONS
@@ -852,18 +851,22 @@ for input_weather_data, input_wind_data in [(True, True)]:  # , (False, False)]:
                     # all_mean_data = pd.concat([pd.DataFrame(dir_sectors), pd.DataFrame(y_test_mean), pd.DataFrame(y_pred_mean)], axis=1).dropna(axis=0, how='any').reset_index(drop=True)
                     all_mean_data = pd.DataFrame({'dir_sectors':dir_sectors, 'y_test_mean':y_test_mean, 'y_pred_mean':y_pred_mean}).dropna(axis=0, how='any').reset_index(drop=True)
                     R2_of_means = r2_score(all_mean_data['y_test_mean'], all_mean_data['y_pred_mean'])  # r2_score would give error if there was a NaN.
-                    plt.figure()
-                    plt.title(nice_str_dict[my_NN_cases[case_idx]['anem_to_test'][0]] + '.  $R^2='+ str(np.round(R2_of_means, 2))+'$')
-                    plt.scatter(X_test_dirs_nonnorm, y_test_nonnorm, s=0.01, alpha=0.2, c='black', label='Measured')
-                    plt.scatter(dir_sectors, y_test_mean, s=3, alpha=0.8, c='dodgerblue', label='Measured mean')
-                    plt.scatter(dir_sectors, y_pred_mean, s=3, alpha=0.8, c='darkorange', label='Predicted mean')
-                    plt.legend(markerscale=2., loc=1)
-                    plt.ylabel('$I_u$')
-                    plt.xlabel('Wind from direction [\N{DEGREE SIGN}]')
+                    plt.figure(figsize=(5.5,2.3), dpi=400)
+                    # plt.title(nice_str_dict[my_NN_cases[case_idx]['anem_to_test'][0]] + '.  $R^2='+ str(np.round(R2_of_means, 2))+'$')
+                    plt.title('1-deg-wide means of $I_u$ ($R^2=' +str(np.round(R2_of_means, 2)) + '$).')
+                    # plt.scatter(X_test_dirs_nonnorm, y_test_nonnorm, s=0.01, alpha=0.2, c='black') #, label='Measured')
+                    plt.scatter(dir_sectors, y_test_mean, s=3, alpha=0.8, c='dodgerblue', label='Measured means')
+                    plt.scatter(dir_sectors, y_pred_mean, s=3, alpha=0.8, c='darkorange', label='Predicted means')
+                    plt.legend(markerscale=2.5, loc=1)
+                    plt.ylabel('$\overline{I_u}$')
+                    # plt.xlabel('Wind from direction [\N{DEGREE SIGN}]')
                     plt.xlim([0, 360])
                     plt.xticks([0,45,90,135,180,225,270,315,360])
-                    plt.ylim([0, 0.8])
-                    plt.savefig(os.path.join(os.getcwd(), 'plots', f'{case_idx}_mean_{y_data_type}_{anem_to_test[0]}_Umin_{U_min}_Rough-{str(add_roughness_input)[0]}_Weather-{str(input_weather_data)[0]}_1Profile-{str(only_1_elevation_profile)[0]}_Sector-{dir_sector_amp}_Avg-{str(do_sector_avg)[0]}.png'))
+                    ax = plt.gca()
+                    ax.set_xticklabels(['0(N)', '45', '90(E)', '135', '180(S)', '225', '270(W)', '315', '360'])
+                    plt.ylim([0, 0.7])
+                    plt.tight_layout(pad=0.05)
+                    plt.savefig(os.path.join(os.getcwd(), 'plots', f'B_{case_idx}_mean_{y_data_type}_{anem_to_test[0]}_Umin_{U_min}_Rough-{str(add_roughness_input)[0]}_Weather-{str(input_weather_data)[0]}_1Profile-{str(only_1_elevation_profile)[0]}_Sector-{dir_sector_amp}_Avg-{str(do_sector_avg)[0]}.png'))
                     # plt.show()
 
 
@@ -1191,3 +1194,5 @@ for input_weather_data, input_wind_data in [(True, True)]:  # , (False, False)]:
 # # plt.legend()
 # # plt.ylim([0,20])
 # # plt.show()
+
+
