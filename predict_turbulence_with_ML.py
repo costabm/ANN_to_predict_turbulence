@@ -839,7 +839,7 @@ for input_weather_data, input_wind_data in [(True, True)]:  # , (False, False)]:
                 ax.set_xticklabels(['0(N)', '45', '90(E)', '135', '180(S)', '225', '270(W)', '315', '360'])
                 plt.ylim([0, 0.7])
                 plt.tight_layout(pad=0.05)
-                plt.savefig(os.path.join(os.getcwd(), 'plots', f'B_{case_idx}_{y_data_type}_{anem_to_test[0]}_Umin_{U_min}_Rough-{str(add_roughness_input)[0]}_Weather-{str(input_weather_data)[0]}_1Profile-{str(only_1_elevation_profile)[0]}_Sector-{dir_sector_amp}_Avg-{str(do_sector_avg)[0]}.png'))
+                plt.savefig(os.path.join(os.getcwd(), 'plots', f'C_{case_idx}_{y_data_type}_{anem_to_test[0]}_Umin_{U_min}_Rough-{str(add_roughness_input)[0]}_Weather-{str(input_weather_data)[0]}_1Profile-{str(only_1_elevation_profile)[0]}_Sector-{dir_sector_amp}_Avg-{str(do_sector_avg)[0]}.png'))
                 # plt.show()
 
                 # PLOT MEANS OF PREDICTIONS
@@ -866,7 +866,7 @@ for input_weather_data, input_wind_data in [(True, True)]:  # , (False, False)]:
                     ax.set_xticklabels(['0(N)', '45', '90(E)', '135', '180(S)', '225', '270(W)', '315', '360'])
                     plt.ylim([0, 0.7])
                     plt.tight_layout(pad=0.05)
-                    plt.savefig(os.path.join(os.getcwd(), 'plots', f'B_{case_idx}_mean_{y_data_type}_{anem_to_test[0]}_Umin_{U_min}_Rough-{str(add_roughness_input)[0]}_Weather-{str(input_weather_data)[0]}_1Profile-{str(only_1_elevation_profile)[0]}_Sector-{dir_sector_amp}_Avg-{str(do_sector_avg)[0]}.png'))
+                    plt.savefig(os.path.join(os.getcwd(), 'plots', f'C_{case_idx}_mean_{y_data_type}_{anem_to_test[0]}_Umin_{U_min}_Rough-{str(add_roughness_input)[0]}_Weather-{str(input_weather_data)[0]}_1Profile-{str(only_1_elevation_profile)[0]}_Sector-{dir_sector_amp}_Avg-{str(do_sector_avg)[0]}.png'))
                     # plt.show()
 
 
