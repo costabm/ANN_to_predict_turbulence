@@ -33,6 +33,9 @@ import optuna
 from elevation_profile_generator import elevation_profile_generator, plot_elevation_profile, get_point2_from_point1_dir_and_dist
 from sklearn.metrics import r2_score
 
+import time
+time.sleep(4.5*60*60)
+
 print('Osp2_B is now being attempted, instead of Osp1_A')
 nice_str_dict = {'osp1_A': 'Ospøya 1', 'osp2_A': 'Ospøya 2', 'osp2_B': 'Ospøya 2', 'synn_A': 'Synnøytangen', 'svar_A': 'Svarvhelleholmen', 'land_A': 'Landrøypynten', 'neso_A': 'Nesøya'}
 
@@ -710,7 +713,7 @@ for input_weather_data, input_wind_data in [(True, True)]:  # , (False, False)]:
                     def hp_opt_objective(trial):
                         weight_decay = trial.suggest_float("weight_decay", 1E-7, 1E-1, log=True)
                         lr =           trial.suggest_float("lr",          0.001, 0.8, log=True)
-                        momentum = trial.suggest_float("momentum", 0., 0.98)
+                        momentum = trial.suggest_float("momentum", 0., 0.95)
                         n_hid_layers = trial.suggest_int('n_hid_layers', 2, 6)
                         n_epochs = trial.suggest_int('n_epochs', 5, 50)
                         activation_fun_name = trial.suggest_categorical('activation', list(activation_fun_dict))
@@ -727,23 +730,28 @@ for input_weather_data, input_wind_data in [(True, True)]:  # , (False, False)]:
                               'loss': loss_fun}
                         _, R2 = train_and_test_NN(X_train, y_train, X_test, y_test, hp=hp, print_loss_per_epoch=print_loss_per_epoch, print_results=print_results, R2_of=optimize_R2_of)
                         return R2
-                    study = optuna.create_study(direction='maximize')
-                    study.optimize(hp_opt_objective, n_trials=n_trials)
+                    while True:
+                        try:  # because now and then the ANN produces an error (e.g. weights explode during learning)
+                            study = optuna.create_study(direction='maximize')
+                            study.optimize(hp_opt_objective, n_trials=n_trials)
+                        except ValueError:
+                            continue
+                        break
                     hp_opt_result = {'anem_to_test': anem_to_test, 'anems_to_train': anem_to_train, 'best_params':study.best_params, 'best_value': study.best_value}
                     hp_opt_results.append(hp_opt_result)
                 return hp_opt_results
 
-            my_NN_cases = [{'anem_to_train': ['osp1_A', 'osp2_B', 'synn_A', 'svar_A', 'neso_A'],
+            my_NN_cases = [{'anem_to_train': ['osp1_A', 'osp2_A', 'synn_A', 'svar_A', 'neso_A'],
                             'anem_to_test': ['land_A']},
-                           {'anem_to_train': ['osp1_A', 'osp2_B', 'synn_A', 'svar_A', 'land_A'],
+                           {'anem_to_train': ['osp1_A', 'osp2_A', 'synn_A', 'svar_A', 'land_A'],
                             'anem_to_test': ['neso_A']},
-                           {'anem_to_train': ['osp2_B', 'synn_A', 'svar_A', 'land_A', 'neso_A'],
+                           {'anem_to_train': ['osp2_A', 'synn_A', 'svar_A', 'land_A', 'neso_A'],
                             'anem_to_test': ['osp1_A']},
                            {'anem_to_train': ['synn_A', 'svar_A', 'land_A', 'neso_A'],
-                            'anem_to_test': ['osp2_B']},
-                           {'anem_to_train': ['osp1_A', 'osp2_B', 'svar_A', 'land_A', 'neso_A'],
+                            'anem_to_test': ['osp2_A']},
+                           {'anem_to_train': ['osp1_A', 'osp2_A', 'svar_A', 'land_A', 'neso_A'],
                             'anem_to_test': ['synn_A']},
-                           {'anem_to_train': ['osp1_A', 'osp2_B', 'synn_A', 'land_A', 'neso_A'],
+                           {'anem_to_train': ['osp1_A', 'osp2_A', 'synn_A', 'land_A', 'neso_A'],
                             'anem_to_test': ['svar_A']}
                           ]
 
@@ -764,19 +772,14 @@ for input_weather_data, input_wind_data in [(True, True)]:  # , (False, False)]:
             # X_data = np.delete(X_data, 1, axis=1) # NOT WORKING FOR THE BEAUTIFUL PLOTS THAT WILL REQUIRE THESE VALUES
             # X_data = np.random.uniform(0,1,size=X_data_backup.shape)
 
-            n_trials = 400
+            n_trials = 200
 
             if do_sector_avg:
                 # y_PDF_data
                 hp_opt_results_PDF  = find_optimal_hp_for_each_of_my_cases(my_NN_cases, X_data=X_data, y_data=y_PDF_data, n_trials=n_trials)
             else:
                 # y_data
-                while True:
-                    try:  # because now and then the ANN produces an error (e.g. weights explode during learning)
-                        hp_opt_results = find_optimal_hp_for_each_of_my_cases(my_NN_cases, X_data=X_data, y_data=y_data[:, None], n_trials=n_trials, optimize_R2_of='means')
-                    except ValueError:
-                        continue
-                    break
+                hp_opt_results = find_optimal_hp_for_each_of_my_cases(my_NN_cases, X_data=X_data, y_data=y_data[:, None], n_trials=n_trials, optimize_R2_of='means')
 
             with open('hp_opt_results.txt', 'w') as file:
                 file.write(json.dumps(str(hp_opt_results)))  # use `json.loads` to do the reverse
@@ -855,7 +858,7 @@ for input_weather_data, input_wind_data in [(True, True)]:  # , (False, False)]:
                     # plt.title(nice_str_dict[my_NN_cases[case_idx]['anem_to_test'][0]] + '.  $R^2='+ str(np.round(R2_of_means, 2))+'$')
                     plt.title('1-deg-wide means of $I_u$ ($R^2=' +str(np.round(R2_of_means, 2)) + '$).')
                     # plt.scatter(X_test_dirs_nonnorm, y_test_nonnorm, s=0.01, alpha=0.2, c='black') #, label='Measured')
-                    plt.scatter(dir_sectors, y_test_mean, s=3, alpha=0.8, c='dodgerblue', label='Measured means')
+                    plt.scatter(dir_sectors, y_test_mean, s=3, alpha=0.8, c='black', label='Measured means')
                     plt.scatter(dir_sectors, y_pred_mean, s=3, alpha=0.8, c='darkorange', label='Predicted means')
                     plt.legend(markerscale=2.5, loc=1)
                     plt.ylabel('$\overline{I_u}$')
