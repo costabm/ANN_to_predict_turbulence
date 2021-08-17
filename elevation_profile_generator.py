@@ -40,7 +40,7 @@ def elevation_profile_generator(point_1, point_2, step_distance=10, list_of_dist
     if list_of_distances:
         new_dists = np.array(list_of_distances)
     else:
-        n_steps = int(np.round(total_distance / step_distance))
+        n_steps = int(np.round(total_distance / step_distance)) + 1
         new_dists = np.linspace(0, total_distance, n_steps)
     new_lons = point_1[0] + new_dists / total_distance * delta_lon
     new_lats = point_1[1] + new_dists / total_distance * delta_lat
