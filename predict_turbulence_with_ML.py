@@ -32,10 +32,13 @@ from find_storms import create_storm_data_files, compile_storm_data_files, find_
 import optuna
 from elevation_profile_generator import elevation_profile_generator, plot_elevation_profile, get_point2_from_point1_dir_and_dist
 from sklearn.metrics import r2_score
+from orography import synn_EN_33, svar_EN_33, osp1_EN_33, osp2_EN_33, land_EN_33, neso_EN_33
 
 
 print('Osp2_A is now being attempted, instead of Osp1_A')
 nice_str_dict = {'osp1_A': 'Ospøya 1', 'osp2_A': 'Ospøya 2', 'osp2_B': 'Ospøya 2', 'synn_A': 'Synnøytangen', 'svar_A': 'Svarvhelleholmen', 'land_A': 'Landrøypynten', 'neso_A': 'Nesøya'}
+anem_EN_33 = {'synn': synn_EN_33, 'svar': svar_EN_33, 'osp1': osp1_EN_33, 'osp2': osp2_EN_33, 'land': land_EN_33, 'neso': neso_EN_33}
+
 
 class LogCoshLoss(torch.nn.Module):
     def __init__(self):
@@ -103,8 +106,6 @@ def slopes_in_deg_from_dists_and_heights(dists, heights):
 
 
 def plot_topography_per_anem(list_of_degs = list(range(360)), list_of_distances=[i*(5.+5.*i) for i in range(45)], plot_topography=True, plot_slopes=False):
-    from orography import synn_EN_33, svar_EN_33, osp1_EN_33, osp2_EN_33, land_EN_33, neso_EN_33
-    anem_EN_33 = {'synn':synn_EN_33, 'svar':svar_EN_33, 'osp1':osp1_EN_33, 'osp2':osp2_EN_33, 'land':land_EN_33, 'neso':neso_EN_33}
     for anem, anem_coor in anem_EN_33.items():
         dists_all_dirs = []
         heights_all_dirs = []
@@ -168,6 +169,7 @@ def get_heights_from_X_dirs_and_dists(point_1, array_of_dirs, cone_angles, dists
         points_2 = np.array([get_point2_from_point1_dir_and_dist(point_1=point_1, direction_deg=d, distance=dists[-1]) for d in X_dir_anem_yawed])
         heights.append(np.array([elevation_profile_generator(point_1=point_1, point_2=p2, step_distance=False, list_of_distances=dists)[1] for p2 in points_2]))
     return np.array(heights)
+
 
 windward_dists = [i*(5. + 5.*i) for i in range(45)]
 leeward_dists =  [i*(10.+10.*i) for i in range(10)]
@@ -261,6 +263,155 @@ def get_df_of_merged_temperatures(list_of_file_paths, label_to_read='Lufttempera
 
 def get_max_num_consec_NaN(df):
     return max(df.isnull().astype(int).groupby(df.notnull().astype(int).cumsum()).cumsum())
+
+
+# Getting the transition zones as described in NS-EN 1991-1-4:2005/NA:2009, NA.4.3.2(2)
+def get_one_roughness_transition_zone(dists, heights):
+    """
+    When using the Eurocode to predict turbulence, two zones with different terrain roughnessess can be chosen. The transition zone is the upstream distance that divides these two categories.
+    My own classification algorithm is smple: Try each distance and choose the one with less misclassifications (ground vs sea) (ascending vs descending roughness with the wind)
+    """
+    roughs = heights.astype(bool).astype(float)
+    assert len(dists) == len(roughs)
+    assert np.unique(roughs) in np.array([0,1])  # roughs need to be made of 0's and 1's only
+    n_points = len(dists)
+    roughs_inv = np.abs(roughs - 1)  # inverted vector: 0's become 1's and 1's become 0's.
+    n_wrong = n_points  # start with all wrong
+    for i in range(n_points):
+        asc_n_wrong_near = np.sum(roughs_inv[:i])
+        asc_n_wrong_far  = np.sum(roughs[i:])
+        des_n_wrong_near = np.sum(roughs[:i])
+        des_n_wrong_far  = np.sum(roughs_inv[i:])
+        if (asc_n_wrong_near + asc_n_wrong_far) < n_wrong:  # Descending roughness with the wind (Ascending roughness with upstream dist: 1 to 0)
+            n_wrong = asc_n_wrong_near + asc_n_wrong_far
+            transition_idx = i
+            direction = 'ascending'
+        if (des_n_wrong_near + des_n_wrong_far) < n_wrong:  # Ascending roughness with the wind (Descending roughness with upstream dist: 1 to 0)
+            n_wrong = des_n_wrong_near + des_n_wrong_far
+            transition_idx = i
+            direction = 'descending'
+    if transition_idx == 0:
+        transition_dist = 1  # 1 meter, instead of 0 meters, to prevent errors in dividing by 0
+    else:
+        transition_dist = (dists[transition_idx-1] + dists[transition_idx]) / 2
+    return transition_idx, transition_dist, direction
+
+
+def get_all_roughness_transition_zones(step_distance=False, total_distance=False, list_of_distances=[i*(5.+5.*i) for i in range(45)]):
+    transition_zones = {}
+    for anem, anem_coor in anem_EN_33.items():
+        transition_zones[anem] = []
+        for d in list(range(360)):
+            dists, heights = example_of_elevation_profile_at_given_point_dir_dist(point_1=anem_coor, direction_deg=d, step_distance=step_distance, total_distance=total_distance, list_of_distances=list_of_distances, plot=False)
+            transition_zones[anem].append(get_one_roughness_transition_zone(dists, heights))
+    return transition_zones
+
+
+def plot_roughness_transitions_per_anem(list_of_degs = list(range(360)), step_distance=False, total_distance=False, list_of_distances=[i*(5.+5.*i) for i in range(45)]):
+    transition_zones = get_all_roughness_transition_zones()
+    from orography import synn_EN_33, svar_EN_33, osp1_EN_33, osp2_EN_33, land_EN_33, neso_EN_33
+    anem_EN_33 = {'synn':synn_EN_33, 'svar':svar_EN_33, 'osp1':osp1_EN_33, 'osp2':osp2_EN_33, 'land':land_EN_33, 'neso':neso_EN_33}
+    for anem, anem_coor in anem_EN_33.items():
+        dists_all_dirs = []
+        roughs_all_dirs = []
+        degs = []
+        for d in list_of_degs:
+            dists, heights = example_of_elevation_profile_at_given_point_dir_dist(point_1=anem_coor, direction_deg=d, step_distance=step_distance, total_distance=total_distance, list_of_distances=list_of_distances, plot=False)
+            roughs = heights.astype(bool).astype(float)
+            dists_all_dirs.append(dists)
+            roughs_all_dirs.append(roughs)
+            degs.append(d)
+        degs = np.array(degs)
+        dists_all_dirs = np.array(dists_all_dirs)
+        roughs_all_dirs = np.array(roughs_all_dirs)
+        fig, ax = plt.subplots(figsize=(5.5,2.3+0.5), dpi=400)
+        ax.pcolormesh(degs, dists_all_dirs[0], roughs_all_dirs.T, cmap=matplotlib.colors.ListedColormap(['skyblue', 'navajowhite']), shading='auto') #, vmin = 0., vmax = 1.)
+        xB = np.array([item[1] for item in transition_zones[anem]])
+        asc_desc = np.array([item[2] for item in transition_zones[anem]])
+        asc_idxs = np.where(asc_desc=='ascending')
+        des_idxs = np.where(asc_desc=='descending')
+        ax.scatter(degs[asc_idxs], xB[asc_idxs], s=1, alpha=0.4, color='red', label='ascending')
+        ax.scatter(degs[des_idxs], xB[des_idxs], s=1, alpha=0.4, color='green', label='descending')
+        ax.set_title(nice_str_dict[anem+'_A']+': '+'Upstream topography;')
+        ax.patch.set_color('skyblue')
+        ax.set_xticks([0, 45, 90, 135, 180, 225, 270, 315, 360])
+        ax.set_xticklabels(['0(N)', '45', '90(E)', '135', '180(S)', '225', '270(W)', '315', '360'])
+        ax.set_yticks([0,2000,4000,6000,8000,10000])
+        ax.set_yticklabels([0,2,4,6,8,10])
+        ax.set_xlabel('Wind from direction [\N{DEGREE SIGN}]')
+        ax.set_ylabel('Upstream distance [km]')
+        # cbar = fig.colorbar(im, cax=cax, orientation="horizontal")
+        # cbar.set_label('Height above sea level [m]')
+        plt.legend(loc=1)
+        plt.tight_layout(pad=0.05)
+        # plt.savefig(os.path.join(os.getcwd(), 'plots', f'Rough_transitions_per_anem-{anem}.png'))
+        plt.show()
+    return None
+
+
+def get_all_Iu_with_eurocode():
+    transition_zones = get_all_roughness_transition_zones()
+    z = 48
+    kI = 1.0
+    c0 = 1.0
+    z0_sea = 0.003
+    z0_gro = 0.3
+    z0_II = 0.05
+    kr_sea = 0.19 * (z0_sea/z0_II)**0.07
+    kr_gro = 0.19 * (z0_gro/z0_II)**0.07
+    cr_sea = kr_sea * np.log(z/z0_sea)
+    cr_gro = kr_gro * np.log(z/z0_gro)
+    c_season = 1.0
+    c_alt = 1.0  # 1.0 because H < H0, where H0 is 900m for Rogaland
+    c_prob = 1.0
+    Iu = {}
+    for anem in anem_EN_33.keys():
+        Iu[anem] = []
+        xB_all_dirs = [item[1] for item in transition_zones[anem]]
+        asc_desc = [item[2] for item in transition_zones[anem]]
+        for d in range(360):
+            if 360 - 45 / 2 < d or d < 0 + 45 / 2:  # N
+                c_dir = 0.9
+            elif 45 - 45 / 2 < d < 45 + 45 / 2:  # NØ
+                c_dir = 0.6
+            elif 90 - 45 / 2 < d < 90 + 45 / 2:  # Ø
+                c_dir = 0.8
+            elif 135 - 45 / 2 < d < 135 + 45 / 2:  # Ø
+                c_dir = 0.9
+            else:
+                c_dir = 1.0
+            if 'osp' in anem:
+                vb0 = 28  # Kommune: Austevoll 28m/s (Osp1 and Osp2)
+            else:
+                vb0 = 26  # Kommune: Tysnes 26m/s (Svar, Land, Neso); Os (Old kommune) 26 m/s (Synn)
+            vb = c_dir * c_season * c_alt * c_prob * vb0
+            vm_sea = cr_sea * c0 * vb
+            vm_gro = cr_gro * c0 * vb
+            Iu_sea = kI / (c0 * np.log(z / z0_sea))
+            Iu_gro = kI / (c0 * np.log(z / z0_gro))
+            xB = xB_all_dirs[d] / 1000  # in kilometers
+            if asc_desc[d]=='ascending':
+                n = 3
+                IuA = Iu_sea
+                IuB = Iu_gro
+                vmA = vm_sea
+                vmB = vm_gro
+                cS = 10 ** (-0.04 * n * np.log10(xB/10))
+                denominator = min(vmB * cS , vmA)
+            elif asc_desc[d]=='descending':
+                n = -3
+                IuA = Iu_gro
+                IuB = Iu_sea
+                vmA = vm_gro
+                vmB = vm_sea
+                cS = 2 - 10 ** (-0.04 * abs(n) * np.log10(xB/10))
+                denominator = max(vmB * cS , vmA)
+            numerator = IuA * vmA * (1-xB/10) + IuB * vmB * xB/10
+            Iu[anem].append(numerator / denominator)
+    return Iu
+
+
+Iu_EN = get_all_Iu_with_eurocode()
 
 
 def predict_turbulence_with_ML():
@@ -803,7 +954,7 @@ def predict_turbulence_with_ML():
                 # X_data = np.delete(X_data, 1, axis=1) # NOT WORKING FOR THE BEAUTIFUL PLOTS THAT WILL REQUIRE THESE VALUES
                 # X_data = np.random.uniform(0,1,size=X_data_backup.shape)
 
-                n_trials = 200
+                n_trials = 1
 
                 if do_sector_avg:
                     # y_PDF_data
@@ -873,7 +1024,7 @@ def predict_turbulence_with_ML():
                     ax.set_xticklabels(['0(N)', '45', '90(E)', '135', '180(S)', '225', '270(W)', '315', '360'])
                     plt.ylim([0, 0.7])
                     plt.tight_layout(pad=0.05)
-                    plt.savefig(os.path.join(os.getcwd(), 'plots', f'E_{case_idx}_{y_data_type}_{anem_to_test[0]}_Umin_{U_min}_Rough-{str(add_roughness_input)[0]}_Weather-{str(input_weather_data)[0]}_1Profile-{str(only_1_elevation_profile)[0]}_Sector-{dir_sector_amp}_Avg-{str(do_sector_avg)[0]}.png'))
+                    plt.savefig(os.path.join(os.getcwd(), 'plots', f'trash_{case_idx}_{y_data_type}_{anem_to_test[0]}_Umin_{U_min}_Rough-{str(add_roughness_input)[0]}_Weather-{str(input_weather_data)[0]}_1Profile-{str(only_1_elevation_profile)[0]}_Sector-{dir_sector_amp}_Avg-{str(do_sector_avg)[0]}.png'))
                     # plt.show()
 
                     # PLOT MEANS OF PREDICTIONS
@@ -883,7 +1034,7 @@ def predict_turbulence_with_ML():
                         y_pred_mean = np.array([np.mean(y_pred_nonnorm[np.where(X_dir_sectors == d)[0]]) for d in dir_sectors])
                         # Removing NaN from the data after organizing it into a dataframe
                         # all_mean_data = pd.concat([pd.DataFrame(dir_sectors), pd.DataFrame(y_test_mean), pd.DataFrame(y_pred_mean)], axis=1).dropna(axis=0, how='any').reset_index(drop=True)
-                        all_mean_data = pd.DataFrame({'dir_sectors':dir_sectors, 'y_test_mean':y_test_mean, 'y_pred_mean':y_pred_mean}).dropna(axis=0, how='any').reset_index(drop=True)
+                        all_mean_data = pd.DataFrame({'dir_sectors':dir_sectors, 'y_test_mean':y_test_mean, 'y_pred_mean':y_pred_mean, 'y_EN1991_mean':Iu_EN[anem_to_test[0][:-2]]}).dropna(axis=0, how='any').reset_index(drop=True)
                         R2_of_means = r2_score(all_mean_data['y_test_mean'], all_mean_data['y_pred_mean'])  # r2_score would give error if there was a NaN.
                         plt.figure(figsize=(5.5,2.3), dpi=400)
                         # plt.title(nice_str_dict[my_NN_cases[case_idx]['anem_to_test'][0]] + '.  $R^2='+ str(np.round(R2_of_means, 2))+'$')
@@ -900,12 +1051,29 @@ def predict_turbulence_with_ML():
                         ax.set_xticklabels(['0(N)', '45', '90(E)', '135', '180(S)', '225', '270(W)', '315', '360'])
                         plt.ylim([0, 0.7])
                         plt.tight_layout(pad=0.05)
-                        plt.savefig(os.path.join(os.getcwd(), 'plots', f'E_{case_idx}_mean_{y_data_type}_{anem_to_test[0]}_Umin_{U_min}_Rough-{str(add_roughness_input)[0]}_Weather-{str(input_weather_data)[0]}_1Profile-{str(only_1_elevation_profile)[0]}_Sector-{dir_sector_amp}_Avg-{str(do_sector_avg)[0]}.png'))
+                        plt.savefig(os.path.join(os.getcwd(), 'plots', f'trash_{case_idx}_mean_{y_data_type}_{anem_to_test[0]}_Umin_{U_min}_Rough-{str(add_roughness_input)[0]}_Weather-{str(input_weather_data)[0]}_1Profile-{str(only_1_elevation_profile)[0]}_Sector-{dir_sector_amp}_Avg-{str(do_sector_avg)[0]}.png'))
                         # plt.show()
+
+                    plt.figure(figsize=(5.5, 2.5), dpi=400)
+                    R2_with_EN = r2_score(all_mean_data['y_test_mean'], all_mean_data['y_EN1991_mean'])  # r2_score would give error if there was a NaN.
+                    plt.title(nice_str_dict[anem_to_test[0]] + ' ($R^2=' +str(np.round(R2_with_EN, 2)) + '$).')
+                    plt.scatter(dir_sectors, y_test_mean, s=3, alpha=0.8, c='black', label='Measured means')
+                    plt.scatter(np.arange(360), Iu_EN[anem_to_test[0][:-2]], s=3, alpha=0.8, c='deepskyblue', label='NS-EN 1991-1-4')
+                    plt.ylabel('$\overline{I_u}$')
+                    plt.xlabel('Wind from direction [\N{DEGREE SIGN}]')
+                    plt.xlim([0, 360])
+                    plt.xticks([0, 45, 90, 135, 180, 225, 270, 315, 360])
+                    ax = plt.gca()
+                    ax.set_xticklabels(['0(N)', '45', '90(E)', '135', '180(S)', '225', '270(W)', '315', '360'])
+                    plt.ylim([0, 0.7])
+                    plt.legend(markerscale=2.5, loc=1)
+                    plt.tight_layout(pad=0.05)
+                    plt.savefig(os.path.join(os.getcwd(), 'plots',f'NS-EN_{case_idx}_{anem_to_test[0]}_mean_Iu.png'))
+                    plt.show()
     return None
 
 
-
+predict_turbulence_with_ML()
 
 
 
