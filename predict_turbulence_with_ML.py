@@ -112,8 +112,6 @@ def plot_topography_per_anem(list_of_degs = list(range(360)), list_of_distances=
         degs = []
         for d in list_of_degs:
             dists, heights = example_of_elevation_profile_at_given_point_dir_dist(point_1=anem_coor, direction_deg=d, step_distance=False, total_distance=False, list_of_distances=list_of_distances, plot=False)
-            if d == 0:
-                print(str(anem) + ':' + str(heights[0]))
             dists_all_dirs.append(dists)
             heights_all_dirs.append(heights)
             if plot_slopes:
@@ -126,8 +124,7 @@ def plot_topography_per_anem(list_of_degs = list(range(360)), list_of_distances=
         if plot_topography:
             cmap = copy.copy(plt.get_cmap('magma_r'))
             heights_all_dirs = np.ma.masked_where(heights_all_dirs == 0, heights_all_dirs)  # set mask where height is 0, to be converted to another color
-            fig, (ax, cax) = plt.subplots(nrows=2, figsize=(5.5,2.3+0.5), dpi=400,
-                                          gridspec_kw={"height_ratios": [1, 0.05]})
+            fig, (ax, cax) = plt.subplots(nrows=2, figsize=(5.5,2.3+0.5), dpi=400, gridspec_kw={"height_ratios": [1, 0.05]})
             im = ax.pcolormesh(degs, dists_all_dirs[0], heights_all_dirs.T, cmap=cmap, shading='auto', vmin = 0., vmax = 800.)
             ax.set_title(nice_str_dict[anem+'_A']+': '+'Upstream topography;')
             ax.patch.set_color('skyblue')
@@ -145,8 +142,7 @@ def plot_topography_per_anem(list_of_degs = list(range(360)), list_of_distances=
             plt.show()
         if plot_slopes:
             cmap = copy.copy(plt.get_cmap('seismic'))
-            fig, (ax, cax) = plt.subplots(nrows=2, figsize=(5.5, 2.3 + 0.5), dpi=400,
-                                          gridspec_kw={"height_ratios": [1, 0.05]})
+            fig, (ax, cax) = plt.subplots(nrows=2, figsize=(5.5, 2.3 + 0.5), dpi=400, gridspec_kw={"height_ratios": [1, 0.05]})
             im = ax.pcolormesh(degs, 6[0], slopes_all_dirs.T, cmap=cmap, shading='auto') #, vmin = -30., vmax = 30.)
             ax.set_title(nice_str_dict[anem + '_A'] + ': ' + 'Upstream slopes;')
             ax.set_xticks([0, 45, 90, 135, 180, 225, 270, 315, 360])
