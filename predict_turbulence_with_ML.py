@@ -1005,7 +1005,7 @@ def predict_turbulence_with_ML():
 
                     plt.figure(figsize=(5.5,2.3), dpi=400)
                     # plt.title(nice_str_dict[my_NN_cases[case_idx]['anem_to_test'][0]] + '.  $R^2='+ str(np.round(R2.item(), 2))+'$')
-                    plt.title('10-min values of $I_u$ ($R^2=' + str(np.round(R2.item(), 2)) + '$);')
+                    plt.title('All 10-min samples of $I_u$ ($R^2=' + str(np.round(R2.item(), 2)) + '$);')
                     ########## ATTENTION: I SHOULDN'T BE USING y_data, but instead y_test since one data point was removed to find a divisor for the batch size.
                     # CERTAIN TRASH: plt.scatter(X_dirs[anem_slice], y_data[anem_slice] * (y_max-y_min) + y_min, s=0.01, alpha=0.2, c='black', label='Measured')
                     # PERHAPS TRASH: plt.scatter(X_dirs[anem_slice], y_PDF_data[anem_slice] * (y_PDF_maxs-y_PDF_mins) + y_PDF_mins, s=0.01, alpha=0.2, c='blue', label='Measured Mean')
@@ -1038,7 +1038,7 @@ def predict_turbulence_with_ML():
                         R2_of_means = r2_score(all_mean_data['y_test_mean'], all_mean_data['y_pred_mean'])  # r2_score would give error if there was a NaN.
                         plt.figure(figsize=(5.5,2.3), dpi=400)
                         # plt.title(nice_str_dict[my_NN_cases[case_idx]['anem_to_test'][0]] + '.  $R^2='+ str(np.round(R2_of_means, 2))+'$')
-                        plt.title('1-deg-wide means of $I_u$ ($R^2=' +str(np.round(R2_of_means, 2)) + '$).')
+                        plt.title('Sectorial means of $I_u$ ($R^2=' +str(np.round(R2_of_means, 2)) + '$).')
                         # plt.scatter(X_test_dirs_nonnorm, y_test_nonnorm, s=0.01, alpha=0.2, c='black') #, label='Measured')
                         plt.scatter(dir_sectors, y_test_mean, s=3, alpha=0.8, c='black', label='Measured means')
                         plt.scatter(dir_sectors, y_pred_mean, s=3, alpha=0.8, c='darkorange', label='Predicted means')
