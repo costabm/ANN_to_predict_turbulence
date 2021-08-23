@@ -38,7 +38,7 @@ from orography import synn_EN_33, svar_EN_33, osp1_EN_33, osp2_EN_33, land_EN_33
 print('Osp2_A is now being attempted, instead of Osp1_A')
 nice_str_dict = {'osp1_A': 'Ospøya 1', 'osp2_A': 'Ospøya 2', 'osp2_B': 'Ospøya 2', 'synn_A': 'Synnøytangen', 'svar_A': 'Svarvhelleholmen', 'land_A': 'Landrøypynten', 'neso_A': 'Nesøya'}
 anem_EN_33 = {'synn': synn_EN_33, 'svar': svar_EN_33, 'osp1': osp1_EN_33, 'osp2': osp2_EN_33, 'land': land_EN_33, 'neso': neso_EN_33}
-
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')  # 'cuda' or 'cpu'. 'cuda' doesn't seem to be working...
 
 class LogCoshLoss(torch.nn.Module):
     def __init__(self):
@@ -127,7 +127,7 @@ def plot_topography_per_anem(list_of_degs = list(range(360)), list_of_distances=
             heights_all_dirs = np.ma.masked_where(heights_all_dirs == 0, heights_all_dirs)  # set mask where height is 0, to be converted to another color
             fig, (ax, cax) = plt.subplots(nrows=2, figsize=(5.5,2.3+0.5), dpi=400, gridspec_kw={"height_ratios": [1, 0.05]})
             im = ax.pcolormesh(degs, dists_all_dirs[0], heights_all_dirs.T, cmap=cmap, shading='auto', vmin = 0., vmax = 800.)
-            ax.set_title(nice_str_dict[anem+'_A']+': '+'Upstream topography;')
+            ax.set_title('Upstream topography at ' + nice_str_dict[anem+'_A']+'.')
             ax.patch.set_color('skyblue')
             ax.set_xticks([0, 45, 90, 135, 180, 225, 270, 315, 360])
             ax.set_xticklabels(['0(N)', '45', '90(E)', '135', '180(S)', '225', '270(W)', '315', '360'])
@@ -139,6 +139,7 @@ def plot_topography_per_anem(list_of_degs = list(range(360)), list_of_distances=
             cbar = fig.colorbar(im, cax=cax, orientation="horizontal")
             cbar.set_label('Height above sea level [m]')
             plt.tight_layout(pad=0.05)
+            plt.subplots_adjust(hspace=0.6)
             plt.savefig(os.path.join(os.getcwd(), 'plots', f'Topography_per_anem-{anem}.png'))
             plt.show()
         if plot_slopes:
@@ -159,7 +160,7 @@ def plot_topography_per_anem(list_of_degs = list(range(360)), list_of_distances=
             plt.show()
     return None
 
-# plot_topography_per_anem(list_of_degs = list(range(360)), list_of_distances=[i*(5.+5.*i) for i in range(45)], plot_topography=True, plot_slopes=False)
+plot_topography_per_anem(list_of_degs = list(range(360)), list_of_distances=[i*(5.+5.*i) for i in range(45)], plot_topography=True, plot_slopes=False)
 
 
 def get_heights_from_X_dirs_and_dists(point_1, array_of_dirs, cone_angles, dists):
@@ -413,19 +414,23 @@ def get_all_Iu_with_eurocode():
 
 Iu_EN = get_all_Iu_with_eurocode()
 
+def generate_new_data(U_min):
+    ##################################################################
+    # # Getting the data for first time
+    X_data_nonnorm, y_data_nonnorm, all_anem_list, start_idxs_of_each_anem, ts_data, other_data = get_all_10_min_data_at_z_48m(U_min=U_min) ##  takes a few minutes...
+    # # # ##################################################################
+    # # # # Saving data
+    data_path = os.path.join(os.getcwd(), 'processed_data_for_ML', f'X_y_ML_ready_data_Umin_{U_min}_masts_6_new_dirs_w_ts')
+    np.savez_compressed(data_path, X=X_data_nonnorm, y=y_data_nonnorm, m=all_anem_list, i=start_idxs_of_each_anem, t=np.array(ts_data, dtype=object)) # o=other_data)
+    with open(data_path+'_other_data.txt', 'w') as outfile:
+        json.dump(other_data, outfile)
+    #################################################################
+    return None
+
 
 def predict_turbulence_with_ML():
     U_min = 2
-    # ##################################################################
-    # # # Getting the data for first time
-    # X_data_nonnorm, y_data_nonnorm, all_anem_list, start_idxs_of_each_anem, ts_data, other_data = get_all_10_min_data_at_z_48m(U_min=U_min) ##  takes a few minutes...
-    # # # # ##################################################################
-    # # # # # Saving data
-    # data_path = os.path.join(os.getcwd(), 'processed_data_for_ML', f'X_y_ML_ready_data_Umin_{U_min}_masts_6_new_dirs_w_ts')
-    # np.savez_compressed(data_path, X=X_data_nonnorm, y=y_data_nonnorm, m=all_anem_list, i=start_idxs_of_each_anem, t=np.array(ts_data, dtype=object)) # o=other_data)
-    # with open(data_path+'_other_data.txt', 'w') as outfile:
-    #     json.dump(other_data, outfile)
-    ##################################################################
+
     y_data_type = 'Iu'  # 'U', 'std', 'Iu'
     only_1_elevation_profile = True
     add_roughness_input = True
@@ -724,7 +729,6 @@ def predict_turbulence_with_ML():
                 # MACHINE LEARNING
                 ########################################
                 # Neural network
-                device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')  # 'cuda' or 'cpu'. 'cuda' doesn't seem to be working...
                 def train_and_test_NN(X_train, y_train, X_test, y_test, hp, print_loss_per_epoch=True, print_results=True, R2_of='values'):
                     """
                     Args:
@@ -1072,17 +1076,295 @@ def predict_turbulence_with_ML():
                     plt.show()
     return None
 
-
-predict_turbulence_with_ML()
-
+# predict_turbulence_with_ML()
 
 
+def predict_mean_turbulence_with_ML():
+    # Do the same as before, but using only topographic data, and mean Iu! The total number of samples will be greatly reduced, to only 360*6!
+    U_min = 2
+    dir_sector_amp = 1
+
+    # Loading data already saved
+    data_path = os.path.join(os.getcwd(), 'processed_data_for_ML', f'X_y_ML_ready_data_Umin_{U_min}_masts_6_new_dirs_w_ts')
+    loaded_data = np.load(data_path + '.npz')
+    loaded_data.allow_pickle = True
+    X_data_nonnorm =          loaded_data['X']
+    y_data_nonnorm =          loaded_data['y']
+    all_anem_list =           loaded_data['m']
+    start_idxs_of_each_anem = loaded_data['i']
+    X_ts =                    loaded_data['t']
+    print(f'Number of features {X_data_nonnorm.shape[1]}: U(1)+Dir(1)+WindwardHeightsMiddleCone(45)+MeanWindWard(44)+STDWindWard(44)+MeanLeeWard(10)+STDLeeWard(9)+MeanSideWard(10)+STDSideWard(9)')
+    n_samples = len(y_data_nonnorm)
+    dir_sectors = np.arange(0, 360, dir_sector_amp)
+    n_sectors = len(dir_sectors)
+    idxs_of_each_anem = np.append(start_idxs_of_each_anem, n_samples)
+
+    def get_sect_mean_data():  # get sectorial mean data
+        df_sect_means = {}
+        df_mins_maxs = pd.DataFrame()
+        for anem_idx, anem in enumerate(all_anem_list):
+            anem_slice = slice(idxs_of_each_anem[anem_idx], idxs_of_each_anem[anem_idx+1])
+            X_U = X_data_nonnorm[anem_slice, 0]
+            X_dirs = X_data_nonnorm[anem_slice, 1]
+            X_sectors = np.searchsorted(dir_sectors, X_dirs, side='right') - 1  # groups all the measured directions into sectors
+            Z_vectors = X_data_nonnorm[anem_slice,2:2+45]
+            R_vectors = np.array(np.array(Z_vectors, dtype=bool), dtype=float)
+            y_std_u =  y_data_nonnorm[anem_slice]
+            y_Iu = y_std_u / X_U
+            df_Sectors = pd.DataFrame({'X_sectors':X_sectors})
+            df_U = pd.DataFrame({'U':X_U})
+            df_Z = pd.DataFrame(Z_vectors).add_prefix('Z')
+            df_R = pd.DataFrame(R_vectors).add_prefix('R')
+            df_std_u = pd.DataFrame({'std_u':y_std_u})
+            df_Iu = pd.DataFrame({'Iu':y_Iu})
+            df_data_1_anem = pd.concat([df_Sectors, df_U, df_Z, df_R, df_std_u, df_Iu], axis=1)
+            df_n_samples_per_sector = df_data_1_anem.groupby('X_sectors').size().reset_index(name='n_samples')
+            df_sect_means_1_anem = pd.concat([df_n_samples_per_sector, df_data_1_anem.groupby('X_sectors').mean()], axis=1)
+            if min(df_sect_means_1_anem['n_samples']) < 3:
+                raise ValueError
+            df_mins_maxs_1_anem = df_sect_means_1_anem.agg([min, max])
+            df_sect_means[anem] = df_sect_means_1_anem
+            df_mins_maxs = df_mins_maxs.append(df_mins_maxs_1_anem)
+        df_mins_maxs = df_mins_maxs.agg([min, max])  # Needed to normalize data by mins and maxs of all anems!
+        return df_sect_means, df_mins_maxs
+
+    df_sect_means, df_mins_maxs = get_sect_mean_data()
 
 
+    def get_X_y_train_and_test_and_batch_size_from_anems(anem_to_train, anem_to_test, df_sect_means, df_mins_maxs, inputs_initials=['Z','R'], output='Iu', batch_size_desired=360, batch_size_lims=[0, 30000]):
+        """
+        Returns: Input (X) and output (y) data, for training and testing, from given lists of anemometers to be used in the training and testing. Batch size
+        """
+        # Transforming ['Z','R','Iu'] into ['Z0','Z1','Z2',...,'R0','R1','R2',...,'Iu']:
+        df_mins_maxs = copy.deepcopy(df_mins_maxs)  # mins and maxs from all anems (both training and testing)
+        df_sect_means = copy.deepcopy(df_sect_means)
+        # Organizing into Training, Testing, Input (X) and Output (y) data. Also normalizing the data into the [0,1] interval.
+        inputs_all = []  # names of all keys of the df_sect_means to be used in the X and y data
+        for col_name in list(df_mins_maxs.columns):
+            if any([col_name.startswith(inputs_initials[j]) for j in range(len(inputs_initials))]):
+                inputs_all.append(col_name)
+        X_all, y_all = {}, {}
+        for anem in anem_to_train + anem_to_test:
+            X_mins = np.array(df_mins_maxs.loc['min'][inputs_all])
+            X_maxs = np.array(df_mins_maxs.loc['max'][inputs_all])
+            y_min =  np.array(df_mins_maxs.loc['min'][output])
+            y_max =  np.array(df_mins_maxs.loc['max'][output])
+            X_all[anem] = np.true_divide(np.array(df_sect_means[anem][inputs_all]) - X_mins, (X_maxs - X_mins), where=((X_maxs - X_mins)!=0))  # if maxs-mins==0 (dumb non-varying  input) do nothing
+            y_all[anem] = np.true_divide(np.array(df_sect_means[anem][output]    ) - y_min , (y_max  -  y_min), where=((y_max   - y_min)!=0))  # if maxs-mins==0 (dumb non-varying output) do nothing
+        X_train = np.array([X_all[anem] for anem in anem_to_train])  # shape:(anems, sectors, features)
+        X_test =  np.array([X_all[anem] for anem in anem_to_test])   # shape:(anems, sectors, features)
+        y_train = np.array([y_all[anem] for anem in anem_to_train])  # shape:(anems, sectors)
+        y_test =  np.array([y_all[anem] for anem in anem_to_test])   # shape:(anems, sectors)
+        # Flattening the two anems and sectors dimensions into one.
+        X_train = X_train.reshape(X_train.shape[0] * X_train.shape[1], X_train.shape[2])  # shape:(anems * sectors, features)
+        X_test  =  X_test.reshape( X_test.shape[0] *  X_test.shape[1],  X_test.shape[2])  # shape:(anems * sectors, features)
+        y_train = y_train.reshape(y_train.shape[0] * y_train.shape[1])                    # shape:(anems * sectors)
+        y_test  =  y_test.reshape( y_test.shape[0] *  y_test.shape[1])                    # shape:(anems * sectors)
+        # Converting to Tensor (GPU-accelerated)
+        X_train = Tensor(X_train).to(device)
+        X_test  = Tensor(X_test ).to(device)
+        y_train = Tensor(y_train).to(device).view(y_train.shape[0], 1)
+        y_test  = Tensor( y_test).to(device).view( y_test.shape[0], 1)
+        # Getting batch size (which can change the X and y data, by trimming a few data points!)
+        n_samples_train = X_train.shape[0]
+        batch_size_possibilities = np.array(sympy.divisors(n_samples_train))  # [1, 2, 4, 23, 46, 92, 4051, 8102, 16204, 93173, 186346, 372692]
+        batch_size = min(batch_size_possibilities, key=lambda x: abs(x - batch_size_desired))
+        batch_cond = batch_size_lims[0] < batch_size < batch_size_lims[1]
+        time_start = datetime.datetime.now()
+        while not batch_cond:
+            time_elapsed = datetime.datetime.now() - time_start
+            if time_elapsed.seconds > 5:
+                raise TimeoutError
+            # Removing 1 data point to assess new possibilities for the batch size (integer divisor of data size)
+            X_train = X_train[:-1, :]
+            y_train = y_train[:-1, :]
+            X_test = X_test[:-1, :]
+            y_test = y_test[:-1, :]
+            n_samples_train = X_train.shape[0]
+            batch_size_possibilities = np.array(sympy.divisors(n_samples_train))  # [1, 2, 4, 23, 46, 92, 4051, 8102, 16204, 93173, 186346, 372692]
+            batch_size = min(batch_size_possibilities, key=lambda x: abs(x - batch_size_desired))
+            batch_cond = batch_size_lims[0] < batch_size < batch_size_lims[1]
+        return X_train, y_train, X_test, y_test, batch_size
+
+    # Neural network
+    def train_and_test_NN(X_train, y_train, X_test, y_test, hp, print_loss_per_epoch=True, print_results=True):
+        """
+        Args:
+            R2_of:
+            X_train:
+            y_train:
+            X_test:
+            y_test:
+            hp:  hyperparameters. e.g. {'lr':1E-1, 'batch_size':92, 'weight_decay':1E-4, 'momentum':0.9, 'n_epochs':10, 'n_hid_layers':2}
+            print_loss_per_epoch:
+            print_results:
+        Returns:
+        """
+        learn_rate = hp['lr']
+        batch_size = hp['batch_size']
+        weight_decay = hp['weight_decay']
+        momentum = hp['momentum']
+        n_epochs = hp['n_epochs']
+        n_hid_layers = hp['n_hid_layers']
+        my_activation_func = hp['activation']  # ReLU, ELU, LeakyReLU, etc.
+        criterion = hp['loss']  # define the loss function
+        n_samples_train = X_train.shape[0]
+        # Building a neural network dynamically
+        torch.manual_seed(0)  # make the following random numbers reproducible
+        n_features = X_train.shape[1]  # number of independent variables in the polynomial
+        n_outputs = y_train.shape[1]  # number of independent variables in the polynomial
+        n_hid_layer_neurons = n_features  # Fancy for: More monomials, more neurons...
+        my_nn = torch.nn.Sequential()
+        my_nn.add_module(name='0', module=torch.nn.Linear(n_features, n_hid_layer_neurons))  # Second layer
+        my_nn.add_module(name='0A', module=my_activation_func())  # Activation function
+        for i in range(n_hid_layers):  # Hidden layers
+            n_neurons_last_layer = (list(my_nn.modules())[-2]).out_features
+            my_nn.add_module(name=str(i + 1), module=torch.nn.Linear(n_neurons_last_layer, max(round(2 / 3 * n_neurons_last_layer), 5)))
+            my_nn.add_module(name=f'{i + 1}A', module=my_activation_func())
+        n_neurons_last_layer = (list(my_nn.modules())[-2]).out_features
+        my_nn.add_module(name=str(n_hid_layers + 1), module=torch.nn.Linear(n_neurons_last_layer, n_outputs))  # Output layer
+        optimizer = SGD(my_nn.parameters(), lr=learn_rate, weight_decay=weight_decay, momentum=momentum)  # define the optimizer
+        # torch.seed()  # make random numbers again random
+        my_nn.to(device)  # To GPU if available
+        # Training
+        # writer = SummaryWriter(f'runs/my_math_learning_tensorboard')  # For later using TensorBoard, for visualization
+        assert (n_samples_train / batch_size).is_integer(), "Change batch size so that n_iterations is integer"
+        n_iterations = int(n_samples_train / batch_size)
+        for epoch in range(n_epochs):
+            epoch_loss = 0
+            idxs_shuffled = torch.randperm(n_samples_train)
+            for b in range(n_iterations):
+                batch_idxs = idxs_shuffled[b * batch_size:b * batch_size + batch_size]
+                y_pred = my_nn(Variable(X_train[batch_idxs]))
+                loss = criterion(y_pred, Variable(y_train[batch_idxs].view(batch_size, n_outputs), requires_grad=False))
+                epoch_loss = loss.item()
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+            if print_loss_per_epoch:
+                print("Epoch: {} Loss: {}".format(epoch, epoch_loss))
+            # writer.add_scalar('Training Loss', epoch_loss, global_step=epoch)  # writing to TensorBoard
+        # Testing
+        n_samples_test = X_test.shape[0]
+        with torch.no_grad():
+            y_pred = my_nn(Variable(X_test))
+            y_test_total_mean = torch.mean(y_test.view(n_samples_test, n_outputs), axis=0)
+            SS_res_test = torch.sum((y_test.view(n_samples_test, n_outputs) - y_pred.view(n_samples_test, n_outputs)) ** 2)
+            SS_tot_test = torch.sum((y_test.view(n_samples_test, n_outputs) - y_test_total_mean) ** 2)
+            R2_test = 1 - SS_res_test / SS_tot_test
+            idxs_to_print = np.random.randint(0, len(y_pred), 10)  # a few random values to be printed
+        if print_results:
+            print(f'R2 on test dataset: ----> {R2_test} <---- . Learning rate: {learn_rate}')
+            print(f"Prediction: {y_pred[idxs_to_print]}")
+            print(f"Reference:   {y_test[idxs_to_print]}")
+            print(f'Batch size: {batch_size}')
+        return y_pred, R2_test
+
+    ##################################################################################################################
+
+    activation_fun_dict = {'ReLU': torch.nn.modules.activation.ReLU,
+                           'ELU': torch.nn.modules.activation.ELU,
+                           'LeakyReLU': torch.nn.modules.activation.LeakyReLU}
+    loss_fun_dict = {'SmoothL1Loss': SmoothL1Loss(),
+                     'MSELoss': MSELoss(),
+                     'L1Loss': L1Loss(),
+                     'LogCoshLoss': LogCoshLoss()}
+
+    def find_optimal_hp_for_each_of_my_cases(my_NN_cases, df_sect_means, df_mins_maxs, n_trials, print_loss_per_epoch=False, print_results=False):
+        hp_opt_results = []
+        for my_NN_case in my_NN_cases:
+            anem_to_train = my_NN_case['anem_to_train']
+            anem_to_test = my_NN_case['anem_to_test']
+            X_train, y_train, X_test, y_test, batch_size = get_X_y_train_and_test_and_batch_size_from_anems(anem_to_train, anem_to_test, df_sect_means, df_mins_maxs)
+            # Beautiful MAGIC happening
+            def hp_opt_objective(trial):
+                weight_decay = trial.suggest_float("weight_decay", 1E-7, 1E-1, log=True)
+                lr = trial.suggest_float("lr", 0.001, 0.8, log=True)
+                momentum = trial.suggest_float("momentum", 0., 0.95)
+                n_hid_layers = trial.suggest_int('n_hid_layers', 2, 6)
+                n_epochs = trial.suggest_int('n_epochs', 10, 1000)
+                activation_fun_name = trial.suggest_categorical('activation', list(activation_fun_dict))
+                activation_fun = activation_fun_dict[activation_fun_name]
+                loss_fun_name = trial.suggest_categorical('loss', list(loss_fun_dict))
+                loss_fun = loss_fun_dict[loss_fun_name]
+                hp = {'lr': lr,
+                      'batch_size': batch_size,
+                      'weight_decay': weight_decay,
+                      'momentum': momentum,
+                      'n_epochs': n_epochs,
+                      'n_hid_layers': n_hid_layers,
+                      'activation': activation_fun,
+                      'loss': loss_fun}
+                _, R2 = train_and_test_NN(X_train, y_train, X_test, y_test, hp=hp, print_loss_per_epoch=print_loss_per_epoch, print_results=print_results)
+                return R2
+            while True:
+                try:  # because now and then the ANN produces an error (e.g. weights explode during learning)
+                    study = optuna.create_study(direction='maximize')
+                    study.optimize(hp_opt_objective, n_trials=n_trials)
+                except ValueError:
+                    continue
+                break
+            hp_opt_result = {'anem_to_test': anem_to_test, 'anems_to_train': anem_to_train, 'best_params': study.best_params, 'best_value': study.best_value}
+            hp_opt_results.append(hp_opt_result)
+        return hp_opt_results
+
+    my_NN_cases = [{'anem_to_train': ['osp1_A', 'osp2_A', 'synn_A', 'svar_A', 'neso_A'],
+                    'anem_to_test': ['land_A']},
+                   {'anem_to_train': ['osp1_A', 'osp2_A', 'synn_A', 'svar_A', 'land_A'],
+                    'anem_to_test': ['neso_A']},
+                   {'anem_to_train': ['osp2_A', 'synn_A', 'svar_A', 'land_A', 'neso_A'],
+                    'anem_to_test': ['osp1_A']},
+                   {'anem_to_train': ['synn_A', 'svar_A', 'land_A', 'neso_A'],
+                    'anem_to_test': ['osp2_A']},
+                   {'anem_to_train': ['osp1_A', 'osp2_A', 'svar_A', 'land_A', 'neso_A'],
+                    'anem_to_test': ['synn_A']},
+                   {'anem_to_train': ['osp1_A', 'osp2_A', 'synn_A', 'land_A', 'neso_A'],
+                    'anem_to_test': ['svar_A']}
+                   ]
+
+    hp_opt = find_optimal_hp_for_each_of_my_cases(my_NN_cases, df_sect_means, df_mins_maxs, n_trials=100)
 
 
+    with open('hp_opt.txt', 'w') as file:
+        file.write(json.dumps(str(hp_opt)))  # use `json.loads` to do the reverse
 
+    for case_idx in range(len(my_NN_cases)):
+        my_NN_case = my_NN_cases[case_idx]
+        anem_to_train = my_NN_case['anem_to_train']
+        anem_to_test = my_NN_case['anem_to_test']
 
+        hp = hp_opt[case_idx]['best_params']
+        if type(hp['activation']) == str:
+            hp['activation'] = activation_fun_dict[hp['activation']]
+            hp['loss'] = loss_fun_dict[hp['loss']]
+        X_train, y_train, X_test, y_test, batch_size = get_X_y_train_and_test_and_batch_size_from_anems(anem_to_train, anem_to_test, df_sect_means, df_mins_maxs)
+        hp['batch_size'] = batch_size
+        y_pred, R2 = train_and_test_NN(X_train, y_train, X_test, y_test, hp=hp, print_loss_per_epoch=True, print_results=True)
+
+        y_test_nonnorm = np.ndarray.flatten(y_test.cpu().numpy()) * (df_mins_maxs['Iu'].loc['max'] - df_mins_maxs['Iu'].loc['min']) + df_mins_maxs['Iu'].loc['min']
+        y_pred_nonnorm = np.ndarray.flatten(y_pred.cpu().numpy()) * (df_mins_maxs['Iu'].loc['max'] - df_mins_maxs['Iu'].loc['min']) + df_mins_maxs['Iu'].loc['min']
+
+        # PLOT MEANS OF PREDICTIONS
+        R2_ANN = str(np.round(R2.cpu().numpy(), 2))
+        R2_with_EN = np.round(r2_score(y_test_nonnorm, Iu_EN[anem_to_test[0][:-2]]), 2)
+        plt.figure(figsize=(5.5, 2.5), dpi=400)
+        # plt.title(nice_str_dict[my_NN_cases[case_idx]['anem_to_test'][0]] + '.  $R^2='+ str(np.round(R2_of_means, 2))+'$')
+        plt.title(f"Sectorial means of $I_u$ at {nice_str_dict[my_NN_cases[case_idx]['anem_to_test'][0]]}.")
+        # plt.scatter(X_test_dirs_nonnorm, y_test_nonnorm, s=0.01, alpha=0.2, c='black') #, label='Measured')
+        plt.scatter(dir_sectors, y_test_nonnorm, s=4, alpha=0.7, c='black', label='Measurements')
+        plt.scatter(dir_sectors, y_pred_nonnorm, s=4, alpha=0.7, c='darkorange', label='ANN predictions')
+        plt.scatter(np.arange(360), Iu_EN[anem_to_test[0][:-2]], s=4, alpha=0.7, c='deepskyblue', label='NS-EN 1991-1-4')
+        plt.legend(markerscale=2.5, loc=1)
+        plt.ylabel('$\overline{I_u}$')
+        plt.xlabel('Wind from direction [\N{DEGREE SIGN}]')
+        plt.xlim([0, 360])
+        plt.xticks([0, 45, 90, 135, 180, 225, 270, 315, 360])
+        ax = plt.gca()
+        ax.set_xticklabels(['0(N)', '45', '90(E)', '135', '180(S)', '225', '270(W)', '315', '360'])
+        plt.ylim([0, 0.6])
+        plt.tight_layout(pad=0.05)
+        plt.savefig(os.path.join(os.getcwd(), 'plots', f'Iu_Case_{case_idx}_{anem_to_test[0]}_Umin_{U_min}_Sector-{dir_sector_amp}_ANNR2_{R2_ANN}_ENR2_{R2_with_EN}.png'))
+        # plt.show()
 
 
 
