@@ -160,7 +160,7 @@ def plot_topography_per_anem(list_of_degs = list(range(360)), list_of_distances=
             plt.show()
     return None
 
-plot_topography_per_anem(list_of_degs = list(range(360)), list_of_distances=[i*(5.+5.*i) for i in range(45)], plot_topography=True, plot_slopes=False)
+# plot_topography_per_anem(list_of_degs = list(range(360)), list_of_distances=[i*(5.+5.*i) for i in range(45)], plot_topography=True, plot_slopes=False)
 
 
 def get_heights_from_X_dirs_and_dists(point_1, array_of_dirs, cone_angles, dists):
@@ -429,8 +429,8 @@ def generate_new_data(U_min):
 
 
 def predict_turbulence_with_ML():
+    result_name_tag = 'Z'
     U_min = 2
-
     y_data_type = 'Iu'  # 'U', 'std', 'Iu'
     only_1_elevation_profile = True
     add_roughness_input = True
@@ -899,7 +899,7 @@ def predict_turbulence_with_ML():
                         def hp_opt_objective(trial):
                             weight_decay = trial.suggest_float("weight_decay", 1E-7, 1E-1, log=True)
                             lr =           trial.suggest_float("lr",          0.001, 0.8, log=True)
-                            momentum = trial.suggest_float("momentum", 0., 0.95)
+                            momentum = trial.suggest_float("momentum", 0., 0.98)
                             n_hid_layers = trial.suggest_int('n_hid_layers', 2, 6)
                             n_epochs = trial.suggest_int('n_epochs', 5, 50)
                             activation_fun_name = trial.suggest_categorical('activation', list(activation_fun_dict))
@@ -958,16 +958,32 @@ def predict_turbulence_with_ML():
                 # X_data = np.delete(X_data, 1, axis=1) # NOT WORKING FOR THE BEAUTIFUL PLOTS THAT WILL REQUIRE THESE VALUES
                 # X_data = np.random.uniform(0,1,size=X_data_backup.shape)
 
-                n_trials = 1
+                n_trials = 10
 
                 if do_sector_avg:
                     # y_PDF_data
                     hp_opt_results_PDF  = find_optimal_hp_for_each_of_my_cases(my_NN_cases, X_data=X_data, y_data=y_PDF_data, n_trials=n_trials)
                 else:
                     # y_data
-                    hp_opt_results = find_optimal_hp_for_each_of_my_cases(my_NN_cases, X_data=X_data, y_data=y_data[:, None], n_trials=n_trials, optimize_R2_of='means')
+                    these_hp_opt_results = find_optimal_hp_for_each_of_my_cases(my_NN_cases, X_data=X_data, y_data=y_data[:, None], n_trials=n_trials, optimize_R2_of='means')
 
-                with open('hp_opt_results.txt', 'w') as file:
+                # Saving the results into a txt file, only if "these" results are better than the ones already stored in txt
+                for case_idx in range(len(my_NN_cases)):
+                    my_NN_case = my_NN_cases[case_idx]
+                    anem_to_test = my_NN_case['anem_to_test']
+                    try:
+                        with open(f'hp_opt_10min.txt', 'r') as prev_file:
+                            prev_hp_opt_results = eval(json.load(prev_file))
+                        tested_results = np.array([[tested_idx, *i['anem_to_test']] for tested_idx,i in enumerate(prev_hp_opt_results)])
+                        tested_results_idx = np.where(tested_results[:,1]==anem_to_test)[0]
+                        if len(tested_results_idx):
+                            if these_hp_opt_results[case_idx]['best_value'] < prev_hp_opt_results[tested_results_idx[0]]['best_value']:
+                                these_hp_opt_results[case_idx]['best_value'] = prev_hp_opt_results[tested_results_idx[0]]['best_value']
+                    except FileNotFoundError:
+                        print(anem_to_test)
+                        print('No file with name: ' + f'hp_opt_10min.txt !!')
+                hp_opt_results = copy.deepcopy(these_hp_opt_results)
+                with open(f'hp_opt_10min.txt', 'w') as file:
                     file.write(json.dumps(str(hp_opt_results)))  # use `json.loads` to do the reverse
 
                 for case_idx in range(len(my_NN_cases)):
@@ -988,9 +1004,10 @@ def predict_turbulence_with_ML():
                             y_PDF_pred, R2 = train_and_test_NN(X_train, y_train, X_test, y_test, hp=hp_PDF, print_loss_per_epoch=True, print_results=True)
                         n_features = X_data_nonnorm.shape[1]
                     else:
-                        hp = hp_opt_results[case_idx]['best_params']
+                        hp = copy.deepcopy(hp_opt_results[case_idx]['best_params'])
                         if type(hp['activation']) == str:
                             hp['activation'] = activation_fun_dict[hp['activation']]
+                        if type(hp['loss']) == str:
                             hp['loss'] = loss_fun_dict[hp['loss']]
                         X_train, y_train, X_test, y_test, batch_size = get_X_y_train_and_test_and_batch_size_from_anems(anem_to_train, anem_to_test, all_anem_list, X_data, y_data[:,None], batch_size_desired=15000, batch_size_lims=[5000,30000])
                         hp['batch_size'] = batch_size
@@ -1006,81 +1023,114 @@ def predict_turbulence_with_ML():
                     y_test_nonnorm = y_test.cpu().numpy() * (y_max - y_min) + y_min
                     anem_idx = np.where(all_anem_list == my_NN_cases[case_idx]['anem_to_test'][0])[0][0]
                     anem_slice = slice(start_idxs_of_each_anem_2[anem_idx], start_idxs_of_each_anem_2[anem_idx + 1])
+                    y_pred_nonnorm = y_pred.cpu().numpy() * (y_max - y_min) + y_min
 
-                    plt.figure(figsize=(5.5,2.3), dpi=400)
-                    # plt.title(nice_str_dict[my_NN_cases[case_idx]['anem_to_test'][0]] + '.  $R^2='+ str(np.round(R2.item(), 2))+'$')
-                    plt.title('All 10-min samples of $I_u$ ($R^2=' + str(np.round(R2.item(), 2)) + '$);')
-                    ########## ATTENTION: I SHOULDN'T BE USING y_data, but instead y_test since one data point was removed to find a divisor for the batch size.
-                    # CERTAIN TRASH: plt.scatter(X_dirs[anem_slice], y_data[anem_slice] * (y_max-y_min) + y_min, s=0.01, alpha=0.2, c='black', label='Measured')
-                    # PERHAPS TRASH: plt.scatter(X_dirs[anem_slice], y_PDF_data[anem_slice] * (y_PDF_maxs-y_PDF_mins) + y_PDF_mins, s=0.01, alpha=0.2, c='blue', label='Measured Mean')
+                    # plt.figure(figsize=(5.5,2.3), dpi=400)
+                    # # plt.title(nice_str_dict[my_NN_cases[case_idx]['anem_to_test'][0]] + '.  $R^2='+ str(np.round(R2.item(), 2))+'$')
+                    # plt.title('All 10-min samples of $I_u$ ($R^2=' + str(np.round(R2.item(), 2)) + '$);')
+                    # ########## ATTENTION: I SHOULDN'T BE USING y_data, but instead y_test since one data point was removed to find a divisor for the batch size.
+                    # # CERTAIN TRASH: plt.scatter(X_dirs[anem_slice], y_data[anem_slice] * (y_max-y_min) + y_min, s=0.01, alpha=0.2, c='black', label='Measured')
+                    # # PERHAPS TRASH: plt.scatter(X_dirs[anem_slice], y_PDF_data[anem_slice] * (y_PDF_maxs-y_PDF_mins) + y_PDF_mins, s=0.01, alpha=0.2, c='blue', label='Measured Mean')
+                    # plt.scatter(X_test_dirs_nonnorm, y_test_nonnorm, s=0.01, alpha=0.2, c='black', label='Measured')
+                    # if do_sector_avg:
+                    #     plt.scatter(X_test_dirs_nonnorm, y_PDF_pred.cpu().numpy() * (y_PDF_maxs - y_PDF_mins) + y_PDF_mins, s=0.01, alpha=0.2, c='orange', label='Predicted Mean')
+                    # else:
+                    #     plt.scatter(X_test_dirs_nonnorm, y_pred_nonnorm, s=0.01, alpha=0.2, c='orange', label='Predicted')
+                    # plt.legend(markerscale=30., loc=1)
+                    # plt.ylabel('$I_u$')
+                    # # plt.xlabel('Wind from direction [\N{DEGREE SIGN}]')
+                    # plt.xlim([0, 360])
+                    # plt.xticks([0, 45, 90, 135, 180, 225, 270, 315, 360])
+                    # ax = plt.gca()
+                    # ax.set_xticklabels(['0(N)', '45', '90(E)', '135', '180(S)', '225', '270(W)', '315', '360'])
+                    # plt.ylim([0, 0.7])
+                    # plt.tight_layout(pad=0.05)
+                    # plt.savefig(os.path.join(os.getcwd(), 'plots', f'trash_{case_idx}_{y_data_type}_{anem_to_test[0]}_Umin_{U_min}_Rough-{str(add_roughness_input)[0]}_Weather-{str(input_weather_data)[0]}_1Profile-{str(only_1_elevation_profile)[0]}_Sector-{dir_sector_amp}_Avg-{str(do_sector_avg)[0]}.png'))
+                    # # plt.show()
+
+                    ####################################
+                    # Alternative ANN model plot:
+                    X_dir_sectors = np.searchsorted(dir_sectors, X_test_dirs_nonnorm, side='right') - 1  # groups all the measured directions into sectors
+                    y_test_mean = np.array([np.mean(y_test_nonnorm[np.where(X_dir_sectors == d)[0]]) for d in dir_sectors])
+                    y_pred_mean = np.array([np.mean(y_pred_nonnorm[np.where(X_dir_sectors == d)[0]]) for d in dir_sectors])
+                    # Removing NaN from the data after organizing it into a dataframe
+                    # all_mean_data = pd.concat([pd.DataFrame(dir_sectors), pd.DataFrame(y_test_mean), pd.DataFrame(y_pred_mean)], axis=1).dropna(axis=0, how='any').reset_index(drop=True)
+                    all_mean_data = pd.DataFrame({'dir_sectors': dir_sectors, 'y_test_mean': y_test_mean, 'y_pred_mean': y_pred_mean, 'y_EN1991_mean': Iu_EN[anem_to_test[0][:-2]]}).dropna(axis=0, how='any').reset_index(drop=True)
+                    R2_of_means = r2_score(all_mean_data['y_test_mean'], all_mean_data['y_pred_mean'])  # r2_score would give error if there was a NaN.
+                    plt.figure(figsize=(5.5,2.5), dpi=400)
+                    plt.title('All 10-minute $I_u$ samples at ' + nice_str_dict[anem_to_test[0]] +'.') # + ' ($R^2_{Means}=' + str(np.round(R2_of_means, 2)) + '$).')
                     plt.scatter(X_test_dirs_nonnorm, y_test_nonnorm, s=0.01, alpha=0.2, c='black', label='Measured')
-                    if do_sector_avg:
-                        plt.scatter(X_test_dirs_nonnorm, y_PDF_pred.cpu().numpy() * (y_PDF_maxs - y_PDF_mins) + y_PDF_mins, s=0.01, alpha=0.2, c='orange', label='Predicted Mean')
-                    else:
-                        y_pred_nonnorm = y_pred.cpu().numpy() * (y_max - y_min) + y_min
-                        plt.scatter(X_test_dirs_nonnorm, y_pred_nonnorm, s=0.01, alpha=0.2, c='orange', label='Predicted')
+                    y_pred_nonnorm = y_pred.cpu().numpy() * (y_max - y_min) + y_min
+                    plt.scatter(X_test_dirs_nonnorm, y_pred_nonnorm, s=0.01, alpha=0.2, c='salmon', label='Predicted')
                     plt.legend(markerscale=30., loc=1)
                     plt.ylabel('$I_u$')
-                    # plt.xlabel('Wind from direction [\N{DEGREE SIGN}]')
-                    plt.xlim([0, 360])
-                    plt.xticks([0, 45, 90, 135, 180, 225, 270, 315, 360])
-                    ax = plt.gca()
-                    ax.set_xticklabels(['0(N)', '45', '90(E)', '135', '180(S)', '225', '270(W)', '315', '360'])
-                    plt.ylim([0, 0.7])
-                    plt.tight_layout(pad=0.05)
-                    plt.savefig(os.path.join(os.getcwd(), 'plots', f'trash_{case_idx}_{y_data_type}_{anem_to_test[0]}_Umin_{U_min}_Rough-{str(add_roughness_input)[0]}_Weather-{str(input_weather_data)[0]}_1Profile-{str(only_1_elevation_profile)[0]}_Sector-{dir_sector_amp}_Avg-{str(do_sector_avg)[0]}.png'))
-                    # plt.show()
-
-                    # PLOT MEANS OF PREDICTIONS
-                    if not do_sector_avg:
-                        X_dir_sectors = np.searchsorted(dir_sectors, X_test_dirs_nonnorm, side='right') - 1  # groups all the measured directions into sectors
-                        y_test_mean = np.array([np.mean(y_test_nonnorm[np.where(X_dir_sectors == d)[0]]) for d in dir_sectors])
-                        y_pred_mean = np.array([np.mean(y_pred_nonnorm[np.where(X_dir_sectors == d)[0]]) for d in dir_sectors])
-                        # Removing NaN from the data after organizing it into a dataframe
-                        # all_mean_data = pd.concat([pd.DataFrame(dir_sectors), pd.DataFrame(y_test_mean), pd.DataFrame(y_pred_mean)], axis=1).dropna(axis=0, how='any').reset_index(drop=True)
-                        all_mean_data = pd.DataFrame({'dir_sectors':dir_sectors, 'y_test_mean':y_test_mean, 'y_pred_mean':y_pred_mean, 'y_EN1991_mean':Iu_EN[anem_to_test[0][:-2]]}).dropna(axis=0, how='any').reset_index(drop=True)
-                        R2_of_means = r2_score(all_mean_data['y_test_mean'], all_mean_data['y_pred_mean'])  # r2_score would give error if there was a NaN.
-                        plt.figure(figsize=(5.5,2.3), dpi=400)
-                        # plt.title(nice_str_dict[my_NN_cases[case_idx]['anem_to_test'][0]] + '.  $R^2='+ str(np.round(R2_of_means, 2))+'$')
-                        plt.title('Sectorial means of $I_u$ ($R^2=' +str(np.round(R2_of_means, 2)) + '$).')
-                        # plt.scatter(X_test_dirs_nonnorm, y_test_nonnorm, s=0.01, alpha=0.2, c='black') #, label='Measured')
-                        plt.scatter(dir_sectors, y_test_mean, s=3, alpha=0.8, c='black', label='Measured means')
-                        plt.scatter(dir_sectors, y_pred_mean, s=3, alpha=0.8, c='darkorange', label='Predicted means')
-                        plt.legend(markerscale=2.5, loc=1)
-                        plt.ylabel('$\overline{I_u}$')
-                        # plt.xlabel('Wind from direction [\N{DEGREE SIGN}]')
-                        plt.xlim([0, 360])
-                        plt.xticks([0,45,90,135,180,225,270,315,360])
-                        ax = plt.gca()
-                        ax.set_xticklabels(['0(N)', '45', '90(E)', '135', '180(S)', '225', '270(W)', '315', '360'])
-                        plt.ylim([0, 0.7])
-                        plt.tight_layout(pad=0.05)
-                        plt.savefig(os.path.join(os.getcwd(), 'plots', f'trash_{case_idx}_mean_{y_data_type}_{anem_to_test[0]}_Umin_{U_min}_Rough-{str(add_roughness_input)[0]}_Weather-{str(input_weather_data)[0]}_1Profile-{str(only_1_elevation_profile)[0]}_Sector-{dir_sector_amp}_Avg-{str(do_sector_avg)[0]}.png'))
-                        # plt.show()
-
-                    plt.figure(figsize=(5.5, 2.5), dpi=400)
-                    R2_with_EN = r2_score(all_mean_data['y_test_mean'], all_mean_data['y_EN1991_mean'])  # r2_score would give error if there was a NaN.
-                    plt.title(nice_str_dict[anem_to_test[0]] + ' ($R^2=' +str(np.round(R2_with_EN, 2)) + '$).')
-                    plt.scatter(dir_sectors, y_test_mean, s=3, alpha=0.8, c='black', label='Measured means')
-                    plt.scatter(np.arange(360), Iu_EN[anem_to_test[0][:-2]], s=3, alpha=0.8, c='deepskyblue', label='NS-EN 1991-1-4')
-                    plt.ylabel('$\overline{I_u}$')
                     plt.xlabel('Wind from direction [\N{DEGREE SIGN}]')
                     plt.xlim([0, 360])
                     plt.xticks([0, 45, 90, 135, 180, 225, 270, 315, 360])
                     ax = plt.gca()
                     ax.set_xticklabels(['0(N)', '45', '90(E)', '135', '180(S)', '225', '270(W)', '315', '360'])
                     plt.ylim([0, 0.7])
-                    plt.legend(markerscale=2.5, loc=1)
                     plt.tight_layout(pad=0.05)
-                    plt.savefig(os.path.join(os.getcwd(), 'plots',f'NS-EN_{case_idx}_{anem_to_test[0]}_mean_Iu.png'))
-                    plt.show()
+                    plt.savefig(os.path.join(os.getcwd(), 'plots', f'Alt_ANN_{result_name_tag}_{case_idx}_{y_data_type}_{anem_to_test[0]}_Umin_{U_min}_R2_{str(np.round(R2.item(), 2))}_MeanR2_{str(np.round(R2_of_means.item(), 2))}.png'))
+                    # plt.show()
+                    ######################################
+
+
+
+
+                    # # PLOT MEANS OF PREDICTIONS
+                    # if not do_sector_avg:
+                    #     X_dir_sectors = np.searchsorted(dir_sectors, X_test_dirs_nonnorm, side='right') - 1  # groups all the measured directions into sectors
+                    #     y_test_mean = np.array([np.mean(y_test_nonnorm[np.where(X_dir_sectors == d)[0]]) for d in dir_sectors])
+                    #     y_pred_mean = np.array([np.mean(y_pred_nonnorm[np.where(X_dir_sectors == d)[0]]) for d in dir_sectors])
+                    #     # Removing NaN from the data after organizing it into a dataframe
+                    #     # all_mean_data = pd.concat([pd.DataFrame(dir_sectors), pd.DataFrame(y_test_mean), pd.DataFrame(y_pred_mean)], axis=1).dropna(axis=0, how='any').reset_index(drop=True)
+                    #     all_mean_data = pd.DataFrame({'dir_sectors':dir_sectors, 'y_test_mean':y_test_mean, 'y_pred_mean':y_pred_mean, 'y_EN1991_mean':Iu_EN[anem_to_test[0][:-2]]}).dropna(axis=0, how='any').reset_index(drop=True)
+                    #     R2_of_means = r2_score(all_mean_data['y_test_mean'], all_mean_data['y_pred_mean'])  # r2_score would give error if there was a NaN.
+                    #     plt.figure(figsize=(5.5,2.3), dpi=400)
+                    #     # plt.title(nice_str_dict[my_NN_cases[case_idx]['anem_to_test'][0]] + '.  $R^2='+ str(np.round(R2_of_means, 2))+'$')
+                    #     plt.title('Sectorial means of $I_u$ ($R^2=' +str(np.round(R2_of_means, 2)) + '$).')
+                    #     # plt.scatter(X_test_dirs_nonnorm, y_test_nonnorm, s=0.01, alpha=0.2, c='black') #, label='Measured')
+                    #     plt.scatter(dir_sectors, y_test_mean, s=3, alpha=0.8, c='black', label='Measured means')
+                    #     plt.scatter(dir_sectors, y_pred_mean, s=3, alpha=0.8, c='darkorange', label='Predicted means')
+                    #     plt.legend(markerscale=2.5, loc=1)
+                    #     plt.ylabel('$\overline{I_u}$')
+                    #     # plt.xlabel('Wind from direction [\N{DEGREE SIGN}]')
+                    #     plt.xlim([0, 360])
+                    #     plt.xticks([0,45,90,135,180,225,270,315,360])
+                    #     ax = plt.gca()
+                    #     ax.set_xticklabels(['0(N)', '45', '90(E)', '135', '180(S)', '225', '270(W)', '315', '360'])
+                    #     plt.ylim([0, 0.7])
+                    #     plt.tight_layout(pad=0.05)
+                    #     plt.savefig(os.path.join(os.getcwd(), 'plots', f'trash_{case_idx}_mean_{y_data_type}_{anem_to_test[0]}_Umin_{U_min}_Rough-{str(add_roughness_input)[0]}_Weather-{str(input_weather_data)[0]}_1Profile-{str(only_1_elevation_profile)[0]}_Sector-{dir_sector_amp}_Avg-{str(do_sector_avg)[0]}.png'))
+                    #     # plt.show()
+                    #
+                    # plt.figure(figsize=(5.5, 2.5), dpi=400)
+                    # R2_with_EN = r2_score(all_mean_data['y_test_mean'], all_mean_data['y_EN1991_mean'])  # r2_score would give error if there was a NaN.
+                    # plt.title(nice_str_dict[anem_to_test[0]] + ' ($R^2=' +str(np.round(R2_with_EN, 2)) + '$).')
+                    # plt.scatter(dir_sectors, y_test_mean, s=3, alpha=0.8, c='black', label='Measured means')
+                    # plt.scatter(np.arange(360), Iu_EN[anem_to_test[0][:-2]], s=3, alpha=0.8, c='deepskyblue', label='NS-EN 1991-1-4')
+                    # plt.ylabel('$\overline{I_u}$')
+                    # plt.xlabel('Wind from direction [\N{DEGREE SIGN}]')
+                    # plt.xlim([0, 360])
+                    # plt.xticks([0, 45, 90, 135, 180, 225, 270, 315, 360])
+                    # ax = plt.gca()
+                    # ax.set_xticklabels(['0(N)', '45', '90(E)', '135', '180(S)', '225', '270(W)', '315', '360'])
+                    # plt.ylim([0, 0.7])
+                    # plt.legend(markerscale=2.5, loc=1)
+                    # plt.tight_layout(pad=0.05)
+                    # plt.savefig(os.path.join(os.getcwd(), 'plots',f'NS-EN_{case_idx}_{anem_to_test[0]}_mean_Iu.png'))
+                    # plt.show()
     return None
 
-# predict_turbulence_with_ML()
+for i in range(100):
+    print(i)
+    predict_turbulence_with_ML()
 
 
 def predict_mean_turbulence_with_ML():
     # Do the same as before, but using only topographic data, and mean Iu! The total number of samples will be greatly reduced, to only 360*6!
+    result_name_tag = 'A'  # add this to the plot names and hp_opt text file
     U_min = 2
     dir_sector_amp = 1
 
@@ -1131,7 +1181,7 @@ def predict_mean_turbulence_with_ML():
     df_sect_means, df_mins_maxs = get_sect_mean_data()
 
 
-    def get_X_y_train_and_test_and_batch_size_from_anems(anem_to_train, anem_to_test, df_sect_means, df_mins_maxs, inputs_initials=['Z','R'], output='Iu', batch_size_desired=360, batch_size_lims=[0, 30000]):
+    def get_X_y_train_and_test_and_batch_size_from_anems(anem_to_train, anem_to_test, df_sect_means, df_mins_maxs, inputs_initials=['Z','R'], output='Iu', batch_size_desired=180, batch_size_lims=[0, 30000]):
         """
         Returns: Input (X) and output (y) data, for training and testing, from given lists of anemometers to be used in the training and testing. Batch size
         """
@@ -1280,9 +1330,9 @@ def predict_mean_turbulence_with_ML():
             def hp_opt_objective(trial):
                 weight_decay = trial.suggest_float("weight_decay", 1E-7, 1E-1, log=True)
                 lr = trial.suggest_float("lr", 0.001, 0.8, log=True)
-                momentum = trial.suggest_float("momentum", 0., 0.95)
+                momentum = trial.suggest_float("momentum", 0., 0.98)
                 n_hid_layers = trial.suggest_int('n_hid_layers', 2, 6)
-                n_epochs = trial.suggest_int('n_epochs', 10, 1000)
+                n_epochs = trial.suggest_int('n_epochs', 10, 3000)
                 activation_fun_name = trial.suggest_categorical('activation', list(activation_fun_dict))
                 activation_fun = activation_fun_dict[activation_fun_name]
                 loss_fun_name = trial.suggest_categorical('loss', list(loss_fun_dict))
@@ -1322,20 +1372,36 @@ def predict_mean_turbulence_with_ML():
                     'anem_to_test': ['svar_A']}
                    ]
 
-    hp_opt = find_optimal_hp_for_each_of_my_cases(my_NN_cases, df_sect_means, df_mins_maxs, n_trials=100)
+    these_hp_opt = find_optimal_hp_for_each_of_my_cases(my_NN_cases, df_sect_means, df_mins_maxs, n_trials=10)
 
-
-    with open('hp_opt.txt', 'w') as file:
-        file.write(json.dumps(str(hp_opt)))  # use `json.loads` to do the reverse
+    # Saving the results into a txt file, only if "these" results are better than the ones already stored in txt
+    for case_idx in range(len(my_NN_cases)):
+        my_NN_case = my_NN_cases[case_idx]
+        anem_to_test = my_NN_case['anem_to_test']
+        try:
+            with open(f'hp_opt.txt', 'r') as prev_file:
+                prev_hp_opt_results = eval(json.load(prev_file))
+            tested_results = np.array([[tested_idx, *i['anem_to_test']] for tested_idx, i in enumerate(prev_hp_opt_results)])
+            tested_results_idx = np.where(tested_results[:, 1] == anem_to_test)[0]
+            if len(tested_results_idx):
+                if these_hp_opt[case_idx]['best_value'] < prev_hp_opt_results[tested_results_idx[0]]['best_value']:
+                    these_hp_opt[case_idx]['best_value'] = prev_hp_opt_results[tested_results_idx[0]]['best_value']
+        except FileNotFoundError:
+            print(anem_to_test)
+            print('No file with name: ' + f'hp_opt.txt !!')
+    hp_opt = copy.deepcopy(these_hp_opt)
+    with open(f'hp_opt.txt', 'w') as file:
+        file.write(json.dumps(str(hp_opt)))
 
     for case_idx in range(len(my_NN_cases)):
         my_NN_case = my_NN_cases[case_idx]
         anem_to_train = my_NN_case['anem_to_train']
         anem_to_test = my_NN_case['anem_to_test']
 
-        hp = hp_opt[case_idx]['best_params']
+        hp = copy.deepcopy(hp_opt[case_idx]['best_params'])
         if type(hp['activation']) == str:
             hp['activation'] = activation_fun_dict[hp['activation']]
+        if type(hp['loss']) == str:
             hp['loss'] = loss_fun_dict[hp['loss']]
         X_train, y_train, X_test, y_test, batch_size = get_X_y_train_and_test_and_batch_size_from_anems(anem_to_train, anem_to_test, df_sect_means, df_mins_maxs)
         hp['batch_size'] = batch_size
@@ -1363,10 +1429,12 @@ def predict_mean_turbulence_with_ML():
         ax.set_xticklabels(['0(N)', '45', '90(E)', '135', '180(S)', '225', '270(W)', '315', '360'])
         plt.ylim([0, 0.6])
         plt.tight_layout(pad=0.05)
-        plt.savefig(os.path.join(os.getcwd(), 'plots', f'Iu_Case_{case_idx}_{anem_to_test[0]}_Umin_{U_min}_Sector-{dir_sector_amp}_ANNR2_{R2_ANN}_ENR2_{R2_with_EN}.png'))
+        plt.savefig(os.path.join(os.getcwd(), 'plots', f'{result_name_tag}_Iu_Case_{case_idx}_{anem_to_test[0]}_Umin_{U_min}_Sector-{dir_sector_amp}_ANNR2_{R2_ANN}_ENR2_{R2_with_EN}.png'))
         # plt.show()
 
-
+for i in range(100):
+    print(i)
+    predict_mean_turbulence_with_ML()
 
 
 

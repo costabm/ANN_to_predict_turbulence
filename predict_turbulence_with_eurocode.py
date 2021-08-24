@@ -71,3 +71,5 @@ import matplotlib
 # c0 = 1 + delta_Szmax * ((B/L0) / ((B/L0)+0.4)) * (1) * np.exp(-(a*z/Lh))
 # print(c0)
 #
+# import numpy as np
+# 1.2/(0.8*np.log(48/0.3))
