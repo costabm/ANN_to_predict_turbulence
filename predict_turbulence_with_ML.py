@@ -40,6 +40,7 @@ nice_str_dict = {'osp1_A': 'Ospøya 1', 'osp2_A': 'Ospøya 2', 'osp2_B': 'Ospøy
 anem_EN_33 = {'synn': synn_EN_33, 'svar': svar_EN_33, 'osp1': osp1_EN_33, 'osp2': osp2_EN_33, 'land': land_EN_33, 'neso': neso_EN_33}
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')  # 'cuda' or 'cpu'. 'cuda' doesn't seem to be working...
 
+
 class LogCoshLoss(torch.nn.Module):
     def __init__(self):
         super().__init__()
@@ -899,7 +900,7 @@ def predict_turbulence_with_ML():
                         def hp_opt_objective(trial):
                             weight_decay = trial.suggest_float("weight_decay", 1E-7, 1E-1, log=True)
                             lr =           trial.suggest_float("lr",          0.001, 0.8, log=True)
-                            momentum = trial.suggest_float("momentum", 0., 0.98)
+                            momentum = trial.suggest_float("momentum", 0., 0.95)
                             n_hid_layers = trial.suggest_int('n_hid_layers', 2, 6)
                             n_epochs = trial.suggest_int('n_epochs', 5, 50)
                             activation_fun_name = trial.suggest_categorical('activation', list(activation_fun_dict))
@@ -958,7 +959,9 @@ def predict_turbulence_with_ML():
                 # X_data = np.delete(X_data, 1, axis=1) # NOT WORKING FOR THE BEAUTIFUL PLOTS THAT WILL REQUIRE THESE VALUES
                 # X_data = np.random.uniform(0,1,size=X_data_backup.shape)
 
-                n_trials = 10
+                n_trials = 200
+                print(X_data.shape)
+                print(y_PDF_data.shape)
 
                 if do_sector_avg:
                     # y_PDF_data
@@ -1123,7 +1126,7 @@ def predict_turbulence_with_ML():
                     # plt.show()
     return None
 
-for i in range(100):
+for i in range(10):
     print(i)
     predict_turbulence_with_ML()
 
@@ -1330,7 +1333,7 @@ def predict_mean_turbulence_with_ML():
             def hp_opt_objective(trial):
                 weight_decay = trial.suggest_float("weight_decay", 1E-7, 1E-1, log=True)
                 lr = trial.suggest_float("lr", 0.001, 0.8, log=True)
-                momentum = trial.suggest_float("momentum", 0., 0.98)
+                momentum = trial.suggest_float("momentum", 0., 0.95)
                 n_hid_layers = trial.suggest_int('n_hid_layers', 2, 6)
                 n_epochs = trial.suggest_int('n_epochs', 10, 3000)
                 activation_fun_name = trial.suggest_categorical('activation', list(activation_fun_dict))
@@ -1372,7 +1375,7 @@ def predict_mean_turbulence_with_ML():
                     'anem_to_test': ['svar_A']}
                    ]
 
-    these_hp_opt = find_optimal_hp_for_each_of_my_cases(my_NN_cases, df_sect_means, df_mins_maxs, n_trials=10)
+    these_hp_opt = find_optimal_hp_for_each_of_my_cases(my_NN_cases, df_sect_means, df_mins_maxs, n_trials=200)
 
     # Saving the results into a txt file, only if "these" results are better than the ones already stored in txt
     for case_idx in range(len(my_NN_cases)):
@@ -1432,7 +1435,7 @@ def predict_mean_turbulence_with_ML():
         plt.savefig(os.path.join(os.getcwd(), 'plots', f'{result_name_tag}_Iu_Case_{case_idx}_{anem_to_test[0]}_Umin_{U_min}_Sector-{dir_sector_amp}_ANNR2_{R2_ANN}_ENR2_{R2_with_EN}.png'))
         # plt.show()
 
-for i in range(100):
+for i in range(10):
     print(i)
     predict_mean_turbulence_with_ML()
 
