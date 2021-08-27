@@ -429,9 +429,9 @@ def generate_new_data(U_min):
     return None
 
 
-def predict_turbulence_with_ML():
+def predict_turbulence_with_ML(n_trials=50):
     result_name_tag = 'Z'
-    U_min = 2
+    U_min = 5
     y_data_type = 'Iu'  # 'U', 'std', 'Iu'
     only_1_elevation_profile = True
     add_roughness_input = True
@@ -542,7 +542,7 @@ def predict_turbulence_with_ML():
                     anem_slice = slice(start_idxs_of_each_anem_2[anem_idx], start_idxs_of_each_anem_2[anem_idx + 1])
                     for s in range(len(dir_sectors)):
                         idxs_360dir = np.where(X_dir_sectors[anem_slice] == s)[0]
-                        if len(idxs_360dir) > 10 :  # minimum number of datapoints, otherwise -> np.nan
+                        if len(idxs_360dir) >= 3 :  # minimum number of datapoints, otherwise -> np.nan
                             if PDF_used == 'mean':
                                 param_mean = np.mean(y_data_nonnorm[anem_slice][idxs_360dir])  # params = a(alpha), c(shape==k), loc, scale(lambda)
                                 y_PDF_data_nonnorm[anem_slice][idxs_360dir] = np.array([param_mean])  # parameter '2' not included (floc, which is set to 0)
@@ -959,7 +959,6 @@ def predict_turbulence_with_ML():
                 # X_data = np.delete(X_data, 1, axis=1) # NOT WORKING FOR THE BEAUTIFUL PLOTS THAT WILL REQUIRE THESE VALUES
                 # X_data = np.random.uniform(0,1,size=X_data_backup.shape)
 
-                n_trials = 200
                 print(X_data.shape)
                 print(y_PDF_data.shape)
 
@@ -981,7 +980,7 @@ def predict_turbulence_with_ML():
                         tested_results_idx = np.where(tested_results[:,1]==anem_to_test)[0]
                         if len(tested_results_idx):
                             if these_hp_opt_results[case_idx]['best_value'] < prev_hp_opt_results[tested_results_idx[0]]['best_value']:
-                                these_hp_opt_results[case_idx]['best_value'] = prev_hp_opt_results[tested_results_idx[0]]['best_value']
+                                these_hp_opt_results[case_idx] = prev_hp_opt_results[tested_results_idx[0]]
                     except FileNotFoundError:
                         print(anem_to_test)
                         print('No file with name: ' + f'hp_opt_10min.txt !!')
@@ -1092,7 +1091,7 @@ def predict_turbulence_with_ML():
                     #     R2_of_means = r2_score(all_mean_data['y_test_mean'], all_mean_data['y_pred_mean'])  # r2_score would give error if there was a NaN.
                     #     plt.figure(figsize=(5.5,2.3), dpi=400)
                     #     # plt.title(nice_str_dict[my_NN_cases[case_idx]['anem_to_test'][0]] + '.  $R^2='+ str(np.round(R2_of_means, 2))+'$')
-                    #     plt.title('Sectorial means of $I_u$ ($R^2=' +str(np.round(R2_of_means, 2)) + '$).')
+                    #     plt.title('Sectoral means of $I_u$ ($R^2=' +str(np.round(R2_of_means, 2)) + '$).')
                     #     # plt.scatter(X_test_dirs_nonnorm, y_test_nonnorm, s=0.01, alpha=0.2, c='black') #, label='Measured')
                     #     plt.scatter(dir_sectors, y_test_mean, s=3, alpha=0.8, c='black', label='Measured means')
                     #     plt.scatter(dir_sectors, y_pred_mean, s=3, alpha=0.8, c='darkorange', label='Predicted means')
@@ -1126,15 +1125,15 @@ def predict_turbulence_with_ML():
                     # plt.show()
     return None
 
-for i in range(10):
-    print(i)
-    predict_turbulence_with_ML()
+# for i in range(10):
+#     print(i)
+#     predict_turbulence_with_ML()
 
 
-def predict_mean_turbulence_with_ML():
+def predict_mean_turbulence_with_ML(n_trials=10):
     # Do the same as before, but using only topographic data, and mean Iu! The total number of samples will be greatly reduced, to only 360*6!
     result_name_tag = 'A'  # add this to the plot names and hp_opt text file
-    U_min = 2
+    U_min = 5
     dir_sector_amp = 1
 
     # Loading data already saved
@@ -1152,7 +1151,7 @@ def predict_mean_turbulence_with_ML():
     n_sectors = len(dir_sectors)
     idxs_of_each_anem = np.append(start_idxs_of_each_anem, n_samples)
 
-    def get_sect_mean_data():  # get sectorial mean data
+    def get_sect_mean_data():  # get Sectoral mean data
         df_sect_means = {}
         df_mins_maxs = pd.DataFrame()
         for anem_idx, anem in enumerate(all_anem_list):
@@ -1171,10 +1170,15 @@ def predict_mean_turbulence_with_ML():
             df_std_u = pd.DataFrame({'std_u':y_std_u})
             df_Iu = pd.DataFrame({'Iu':y_Iu})
             df_data_1_anem = pd.concat([df_Sectors, df_U, df_Z, df_R, df_std_u, df_Iu], axis=1)
-            df_n_samples_per_sector = df_data_1_anem.groupby('X_sectors').size().reset_index(name='n_samples')
+            df_n_samples_per_sector = df_data_1_anem.groupby('X_sectors').size().reset_index(name='n_samples')  # sectors with 0 samples will vanish here!
+            sectors_with_data = df_n_samples_per_sector['X_sectors'].to_numpy()
+            sectors_with_no_data = [x for x in dir_sectors if x not in sectors_with_data]
+            df_n_samples_per_sector = df_n_samples_per_sector.append(pd.DataFrame({'X_sectors':sectors_with_no_data, 'n_samples':np.zeros(len(sectors_with_no_data))})).sort_values(by=['X_sectors']).reset_index(drop=True)  # Manually inserting the sectors without data that vanished previously
             df_sect_means_1_anem = pd.concat([df_n_samples_per_sector, df_data_1_anem.groupby('X_sectors').mean()], axis=1)
-            if min(df_sect_means_1_anem['n_samples']) < 3:
-                raise ValueError
+            # Changing mean values to nan where number of samples is less than a threshold:
+            n_samples_threshold = 3
+            columns_to_convert_to_nan = [c for c in df_sect_means_1_anem.columns if c not in ['X_sectors','n_samples']]
+            df_sect_means_1_anem.loc[df_sect_means_1_anem['n_samples'] < n_samples_threshold, columns_to_convert_to_nan] = np.nan
             df_mins_maxs_1_anem = df_sect_means_1_anem.agg([min, max])
             df_sect_means[anem] = df_sect_means_1_anem
             df_mins_maxs = df_mins_maxs.append(df_mins_maxs_1_anem)
@@ -1182,20 +1186,23 @@ def predict_mean_turbulence_with_ML():
         return df_sect_means, df_mins_maxs
 
     df_sect_means, df_mins_maxs = get_sect_mean_data()
+    df_mins_maxs.to_csv('df_mins_maxs.csv')
 
-
-    def get_X_y_train_and_test_and_batch_size_from_anems(anem_to_train, anem_to_test, df_sect_means, df_mins_maxs, inputs_initials=['Z','R'], output='Iu', batch_size_desired=180, batch_size_lims=[0, 30000]):
+    def get_X_y_train_and_test_and_batch_size_from_anems(anem_to_train, anem_to_test, df_sect_means, df_mins_maxs, inputs_initials=['Z','R'], output='Iu', batch_size_desired=360, batch_size_lims=[30, 30000], remove_nan_data=True):
         """
         Returns: Input (X) and output (y) data, for training and testing, from given lists of anemometers to be used in the training and testing. Batch size
         """
-        # Transforming ['Z','R','Iu'] into ['Z0','Z1','Z2',...,'R0','R1','R2',...,'Iu']:
         df_mins_maxs = copy.deepcopy(df_mins_maxs)  # mins and maxs from all anems (both training and testing)
         df_sect_means = copy.deepcopy(df_sect_means)
-        # Organizing into Training, Testing, Input (X) and Output (y) data. Also normalizing the data into the [0,1] interval.
+        if remove_nan_data:
+            for anem in anem_to_train + anem_to_test:
+                df_sect_means[anem] = df_sect_means[anem].dropna(axis=0, how='any').reset_index(drop=True)
+        # Transforming ['Z','R','Iu'] into ['Z0','Z1','Z2',...,'R0','R1','R2',...,'Iu']:
         inputs_all = []  # names of all keys of the df_sect_means to be used in the X and y data
         for col_name in list(df_mins_maxs.columns):
             if any([col_name.startswith(inputs_initials[j]) for j in range(len(inputs_initials))]):
                 inputs_all.append(col_name)
+        # Organizing into Training, Testing, Input (X) and Output (y) data. Also normalizing the data into the [0,1] interval.
         X_all, y_all = {}, {}
         for anem in anem_to_train + anem_to_test:
             X_mins = np.array(df_mins_maxs.loc['min'][inputs_all])
@@ -1204,15 +1211,23 @@ def predict_mean_turbulence_with_ML():
             y_max =  np.array(df_mins_maxs.loc['max'][output])
             X_all[anem] = np.true_divide(np.array(df_sect_means[anem][inputs_all]) - X_mins, (X_maxs - X_mins), where=((X_maxs - X_mins)!=0))  # if maxs-mins==0 (dumb non-varying  input) do nothing
             y_all[anem] = np.true_divide(np.array(df_sect_means[anem][output]    ) - y_min , (y_max  -  y_min), where=((y_max   - y_min)!=0))  # if maxs-mins==0 (dumb non-varying output) do nothing
-        X_train = np.array([X_all[anem] for anem in anem_to_train])  # shape:(anems, sectors, features)
-        X_test =  np.array([X_all[anem] for anem in anem_to_test])   # shape:(anems, sectors, features)
-        y_train = np.array([y_all[anem] for anem in anem_to_train])  # shape:(anems, sectors)
-        y_test =  np.array([y_all[anem] for anem in anem_to_test])   # shape:(anems, sectors)
-        # Flattening the two anems and sectors dimensions into one.
-        X_train = X_train.reshape(X_train.shape[0] * X_train.shape[1], X_train.shape[2])  # shape:(anems * sectors, features)
-        X_test  =  X_test.reshape( X_test.shape[0] *  X_test.shape[1],  X_test.shape[2])  # shape:(anems * sectors, features)
-        y_train = y_train.reshape(y_train.shape[0] * y_train.shape[1])                    # shape:(anems * sectors)
-        y_test  =  y_test.reshape( y_test.shape[0] *  y_test.shape[1])                    # shape:(anems * sectors)
+        sectors_train = pd.concat([df_sect_means[anem]['X_sectors'] for anem in anem_to_train]).to_numpy(int)
+        sectors_test  = pd.concat([df_sect_means[anem]['X_sectors'] for anem in  anem_to_test]).to_numpy(int)
+        X_train = pd.concat([pd.DataFrame(X_all[anem]) for anem in anem_to_train]).to_numpy()
+        X_test  = pd.concat([pd.DataFrame(X_all[anem]) for anem in  anem_to_test]).to_numpy()
+        y_train = pd.concat([pd.DataFrame(y_all[anem]) for anem in anem_to_train]).to_numpy()
+        y_test  = pd.concat([pd.DataFrame(y_all[anem]) for anem in  anem_to_test]).to_numpy()
+        ### OLD TRASH
+        # X_train = np.array([X_all[anem] for anem in anem_to_train])  # shape:(anems, sectors, features)
+        # X_test =  np.array([X_all[anem] for anem in anem_to_test])   # shape:(anems, sectors, features)
+        # y_train = np.array([y_all[anem] for anem in anem_to_train])  # shape:(anems, sectors)
+        # y_test =  np.array([y_all[anem] for anem in anem_to_test])   # shape:(anems, sectors)
+        # # Flattening the two anems and sectors dimensions into one.
+        # X_train = X_train.reshape(X_train.shape[0] * X_train.shape[1], X_train.shape[2])  # shape:(anems * sectors, features)
+        # X_test  =  X_test.reshape( X_test.shape[0] *  X_test.shape[1],  X_test.shape[2])  # shape:(anems * sectors, features)
+        # y_train = y_train.reshape(y_train.shape[0] * y_train.shape[1])                    # shape:(anems * sectors)
+        # y_test  =  y_test.reshape( y_test.shape[0] *  y_test.shape[1])                    # shape:(anems * sectors)
+        ### OLD TRASH
         # Converting to Tensor (GPU-accelerated)
         X_train = Tensor(X_train).to(device)
         X_test  = Tensor(X_test ).to(device)
@@ -1233,11 +1248,13 @@ def predict_mean_turbulence_with_ML():
             y_train = y_train[:-1, :]
             X_test = X_test[:-1, :]
             y_test = y_test[:-1, :]
+            sectors_train = sectors_train[:-1]
+            sectors_test = sectors_test[:-1]
             n_samples_train = X_train.shape[0]
             batch_size_possibilities = np.array(sympy.divisors(n_samples_train))  # [1, 2, 4, 23, 46, 92, 4051, 8102, 16204, 93173, 186346, 372692]
             batch_size = min(batch_size_possibilities, key=lambda x: abs(x - batch_size_desired))
             batch_cond = batch_size_lims[0] < batch_size < batch_size_lims[1]
-        return X_train, y_train, X_test, y_test, batch_size
+        return X_train, y_train, X_test, y_test, batch_size, sectors_train, sectors_test
 
     # Neural network
     def train_and_test_NN(X_train, y_train, X_test, y_test, hp, print_loss_per_epoch=True, print_results=True):
@@ -1328,7 +1345,9 @@ def predict_mean_turbulence_with_ML():
         for my_NN_case in my_NN_cases:
             anem_to_train = my_NN_case['anem_to_train']
             anem_to_test = my_NN_case['anem_to_test']
-            X_train, y_train, X_test, y_test, batch_size = get_X_y_train_and_test_and_batch_size_from_anems(anem_to_train, anem_to_test, df_sect_means, df_mins_maxs)
+            X_train, y_train, X_test, y_test, batch_size, _, _ = get_X_y_train_and_test_and_batch_size_from_anems(anem_to_train, anem_to_test, df_sect_means, df_mins_maxs)
+            print('X_train shape is:' + str(X_train.shape))
+            print('batch_size shape is:' + str(batch_size))
             # Beautiful MAGIC happening
             def hp_opt_objective(trial):
                 weight_decay = trial.suggest_float("weight_decay", 1E-7, 1E-1, log=True)
@@ -1375,7 +1394,7 @@ def predict_mean_turbulence_with_ML():
                     'anem_to_test': ['svar_A']}
                    ]
 
-    these_hp_opt = find_optimal_hp_for_each_of_my_cases(my_NN_cases, df_sect_means, df_mins_maxs, n_trials=200)
+    these_hp_opt = find_optimal_hp_for_each_of_my_cases(my_NN_cases, df_sect_means, df_mins_maxs, n_trials=n_trials)
 
     # Saving the results into a txt file, only if "these" results are better than the ones already stored in txt
     for case_idx in range(len(my_NN_cases)):
@@ -1388,7 +1407,7 @@ def predict_mean_turbulence_with_ML():
             tested_results_idx = np.where(tested_results[:, 1] == anem_to_test)[0]
             if len(tested_results_idx):
                 if these_hp_opt[case_idx]['best_value'] < prev_hp_opt_results[tested_results_idx[0]]['best_value']:
-                    these_hp_opt[case_idx]['best_value'] = prev_hp_opt_results[tested_results_idx[0]]['best_value']
+                    these_hp_opt[case_idx] = prev_hp_opt_results[tested_results_idx[0]]
         except FileNotFoundError:
             print(anem_to_test)
             print('No file with name: ' + f'hp_opt.txt !!')
@@ -1406,7 +1425,7 @@ def predict_mean_turbulence_with_ML():
             hp['activation'] = activation_fun_dict[hp['activation']]
         if type(hp['loss']) == str:
             hp['loss'] = loss_fun_dict[hp['loss']]
-        X_train, y_train, X_test, y_test, batch_size = get_X_y_train_and_test_and_batch_size_from_anems(anem_to_train, anem_to_test, df_sect_means, df_mins_maxs)
+        X_train, y_train, X_test, y_test, batch_size, sectors_train, sectors_test = get_X_y_train_and_test_and_batch_size_from_anems(anem_to_train, anem_to_test, df_sect_means, df_mins_maxs)
         hp['batch_size'] = batch_size
         y_pred, R2 = train_and_test_NN(X_train, y_train, X_test, y_test, hp=hp, print_loss_per_epoch=True, print_results=True)
 
@@ -1415,14 +1434,17 @@ def predict_mean_turbulence_with_ML():
 
         # PLOT MEANS OF PREDICTIONS
         R2_ANN = str(np.round(R2.cpu().numpy(), 2))
-        R2_with_EN = np.round(r2_score(y_test_nonnorm, Iu_EN[anem_to_test[0][:-2]]), 2)
+        Iu_EN_anem = np.array(Iu_EN[anem_to_test[0][:-2]])
+        Iu_EN_at_sectors_w_data = Iu_EN_anem[sectors_test]
+        R2_with_EN = np.round(r2_score(y_test_nonnorm, Iu_EN_at_sectors_w_data), 2)
         plt.figure(figsize=(5.5, 2.5), dpi=400)
         # plt.title(nice_str_dict[my_NN_cases[case_idx]['anem_to_test'][0]] + '.  $R^2='+ str(np.round(R2_of_means, 2))+'$')
-        plt.title(f"Sectorial means of $I_u$ at {nice_str_dict[my_NN_cases[case_idx]['anem_to_test'][0]]}.")
+        plt.title(f"Sectoral averages of $I_u$ at {nice_str_dict[my_NN_cases[case_idx]['anem_to_test'][0]]}.")
         # plt.scatter(X_test_dirs_nonnorm, y_test_nonnorm, s=0.01, alpha=0.2, c='black') #, label='Measured')
-        plt.scatter(dir_sectors, y_test_nonnorm, s=4, alpha=0.7, c='black', label='Measurements')
-        plt.scatter(dir_sectors, y_pred_nonnorm, s=4, alpha=0.7, c='darkorange', label='ANN predictions')
-        plt.scatter(np.arange(360), Iu_EN[anem_to_test[0][:-2]], s=4, alpha=0.7, c='deepskyblue', label='NS-EN 1991-1-4')
+        plt.scatter(sectors_test, y_test_nonnorm, s=4, alpha=0.7, c='black', label='Measurements')
+        plt.scatter(sectors_test, y_pred_nonnorm, s=4, alpha=0.7, c='darkorange', label='ANN predictions')
+        # plt.scatter(np.arange(360), Iu_EN[anem_to_test[0][:-2]], s=4, alpha=0.7, c='deepskyblue', label='NS-EN 1991-1-4')
+        plt.scatter(sectors_test, Iu_EN_at_sectors_w_data, s=4, alpha=0.7, c='deepskyblue', label='NS-EN 1991-1-4')
         plt.legend(markerscale=2.5, loc=1)
         plt.ylabel('$\overline{I_u}$')
         plt.xlabel('Wind from direction [\N{DEGREE SIGN}]')

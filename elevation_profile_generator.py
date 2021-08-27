@@ -4,6 +4,7 @@ from orography import get_all_geotiffs_merged
 import matplotlib.pyplot as plt
 from scipy.spatial import cKDTree
 import copy
+import pandas as pd
 
 lon_mosaic, lat_mosaic, imgs_mosaic = get_all_geotiffs_merged()
 
@@ -58,7 +59,7 @@ def plot_elevation_profile(point_1, point_2, step_distance, list_of_distances):
     land_idxs = np.where(heights!=0)[0]
 
     plt.figure(dpi=400, figsize=(5,1.8))
-    plt.title('Upstream terrain profile example')
+    plt.title('Upstream terrain profile')
     plt.plot(dists[land_idxs], heights[land_idxs], c='peru' , linestyle='-', linewidth=1, zorder=1.9) #c='peru')
     plt.scatter(dists[land_idxs], heights[land_idxs], c='peru' , s=1, label='Ground') #c='peru')
     plt.scatter(dists[sea_idxs], heights[sea_idxs], c='skyblue', s=2, label='Sea', zorder=2)  # c='peru')
@@ -74,19 +75,30 @@ def plot_elevation_profile(point_1, point_2, step_distance, list_of_distances):
     new_sea_idxs = np.where(new_heights==0)[0]
     new_land_idxs = np.where(new_heights!=0)[0]
 
+    df_mins_maxs = pd.read_csv('df_mins_maxs.csv')
+    df_mins_maxs_Z_columns = [c for c in df_mins_maxs.columns if c[0]=='Z']
+    Z_mins = np.array(df_mins_maxs[df_mins_maxs_Z_columns].loc[0])
+    Z_maxs = np.array(df_mins_maxs[df_mins_maxs_Z_columns].loc[1])
+
+    new_normalized_heights = (new_heights - Z_mins) / (Z_maxs - Z_mins)
+
     plt.figure(dpi=400, figsize=(5,1.8))
-    plt.title('Z vector example')
+    plt.title('Z vector')
+    # NEW:
+    plt.plot(new_dists, new_normalized_heights, c='black', linestyle='--', alpha=0.6, linewidth=1) #c='peru')
+    plt.scatter(new_dists, new_normalized_heights, c='black', s=3, label='Ground')  # c='peru')
+    # OLD:
     # plt.plot(new_dists, new_heights, c='black', linestyle='--', alpha=0.6, linewidth=1) #c='peru')
-    plt.scatter(new_dists, new_heights, c='black', s=3, label='Ground')  # c='peru')
+    # plt.scatter(new_dists, new_heights, c='black', s=3, label='Ground')  # c='peru')
     plt.xlabel('Distance upstream [m]')
-    plt.ylabel('Height [m]')
-    plt.ylim([-10, 400])
+    plt.ylabel('Norm. height')
+    plt.ylim([-0.05, 1.05])
     plt.tight_layout()
     plt.savefig('plots/TerrainProfile_2_example.png')
     plt.show()
 
     plt.figure(dpi=400, figsize=(5,1.8))
-    plt.title('R vector example')
+    plt.title('R vector')
     plt.scatter(new_dists[new_sea_idxs], np.zeros(len(new_sea_idxs)), c='black', s=2, label='Ground')  # c='peru')
     plt.scatter(new_dists[new_land_idxs], np.ones(len(new_land_idxs)), c='black', s=2, label='Ground')  # c='peru')
     plt.xlabel('Distance upstream [m]')
@@ -110,7 +122,7 @@ def plot_elevation_profile(point_1, point_2, step_distance, list_of_distances):
     imgs_mosaic_crop = np.ma.masked_where(imgs_mosaic_crop == 0, imgs_mosaic_crop)  # set mask where height is 0, to be converted to another color
     cmap.set_bad(color='skyblue')  # color where height == 0
     plt.figure(dpi=400)
-    plt.title('Topography: Fetch sample example')
+    plt.title('Data sample example:\n Topography, location and fetch')
     bbox = ((lon_mosaic.min(),   lon_mosaic.max(),
              lat_mosaic.min(),  lat_mosaic.max()))
     bbox = ((lon_mosaic_crop.min(),   lon_mosaic_crop.max(),
