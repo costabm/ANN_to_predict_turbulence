@@ -96,8 +96,8 @@ def example_of_elevation_profile_at_given_point_dir_dist(point_1=[-34625., 67000
         plot_elevation_profile(point_1=point_1, point_2=point_2, step_distance=step_distance, list_of_distances=list_of_distances)
     return dists, heights
 
-# example_of_elevation_profile_at_given_point_dir_dist(point_1=[-34625., 6700051.], direction_deg=160, step_distance=False, total_distance=False,
-#                                                    list_of_distances=[i*(5.+5.*i) for i in range(45)], plot=True)
+example_of_elevation_profile_at_given_point_dir_dist(point_1=[-34625., 6700051.], direction_deg=160, step_distance=False, total_distance=False,
+                                                   list_of_distances=[i*(5.+5.*i) for i in range(45)], plot=True)
 
 
 def slopes_in_deg_from_dists_and_heights(dists, heights):
@@ -126,21 +126,21 @@ def plot_topography_per_anem(list_of_degs = list(range(360)), list_of_distances=
         if plot_topography:
             cmap = copy.copy(plt.get_cmap('magma_r'))
             heights_all_dirs = np.ma.masked_where(heights_all_dirs == 0, heights_all_dirs)  # set mask where height is 0, to be converted to another color
-            fig, (ax, cax) = plt.subplots(nrows=2, figsize=(5.5,2.3+0.5), dpi=400, gridspec_kw={"height_ratios": [1, 0.05]})
+            fig, (ax, cax) = plt.subplots(nrows=2, figsize=(0.9*5.5,0.9*(2.3+0.5)), dpi=400/0.9, gridspec_kw={"height_ratios": [1, 0.05]})
             im = ax.pcolormesh(degs, dists_all_dirs[0], heights_all_dirs.T, cmap=cmap, shading='auto', vmin = 0., vmax = 800.)
-            ax.set_title('Upstream topography at ' + nice_str_dict[anem+'_A']+'.')
+            ax.set_title('Upstream topography at ' + nice_str_dict[anem+'_A'])
             ax.patch.set_color('skyblue')
             ax.set_xticks([0, 45, 90, 135, 180, 225, 270, 315, 360])
             ax.set_xticklabels(['0(N)', '45', '90(E)', '135', '180(S)', '225', '270(W)', '315', '360'])
             ax.set_yticks([0,2000,4000,6000,8000,10000])
             ax.set_yticklabels([0,2,4,6,8,10])
             ax.set_xlabel('Wind from direction [\N{DEGREE SIGN}]')
-            ax.set_ylabel('Upstream distance [km]')
+            ax.set_ylabel('Upstream dist. [km]')
             # cax.set_xlabel('test')
             cbar = fig.colorbar(im, cax=cax, orientation="horizontal")
             cbar.set_label('Height above sea level [m]')
-            plt.tight_layout(pad=0.05)
-            plt.subplots_adjust(hspace=0.6)
+            plt.tight_layout(h_pad=0.05, w_pad=0.2)
+            plt.subplots_adjust(hspace=0.9)
             plt.savefig(os.path.join(os.getcwd(), 'plots', f'Topography_per_anem-{anem}.png'))
             plt.show()
         if plot_slopes:
@@ -153,7 +153,7 @@ def plot_topography_per_anem(list_of_degs = list(range(360)), list_of_distances=
             ax.set_yticks([0, 2000, 4000, 6000, 8000, 10000])
             ax.set_yticklabels([0, 2, 4, 6, 8, 10])
             ax.set_xlabel('Wind from direction [\N{DEGREE SIGN}]')
-            ax.set_ylabel('Upstream distance [km]')
+            ax.set_ylabel('Upstream dist. [km]')
             cbar = fig.colorbar(im, cax=cax, orientation="horizontal")
             cbar.set_label('Slope [\N{DEGREE SIGN}]')
             plt.tight_layout(pad=0.05)
@@ -161,7 +161,7 @@ def plot_topography_per_anem(list_of_degs = list(range(360)), list_of_distances=
             plt.show()
     return None
 
-# plot_topography_per_anem(list_of_degs = list(range(360)), list_of_distances=[i*(5.+5.*i) for i in range(45)], plot_topography=True, plot_slopes=False)
+plot_topography_per_anem(list_of_degs = list(range(360)), list_of_distances=[i*(5.+5.*i) for i in range(45)], plot_topography=True, plot_slopes=False)
 
 
 def get_heights_from_X_dirs_and_dists(point_1, array_of_dirs, cone_angles, dists):
@@ -1130,7 +1130,7 @@ def predict_turbulence_with_ML(n_trials=50):
 #     predict_turbulence_with_ML()
 
 
-def predict_mean_turbulence_with_ML(n_trials=10):
+def predict_mean_turbulence_with_ML(n_trials):
     # Do the same as before, but using only topographic data, and mean Iu! The total number of samples will be greatly reduced, to only 360*6!
     result_name_tag = 'A'  # add this to the plot names and hp_opt text file
     U_min = 5
@@ -1213,6 +1213,7 @@ def predict_mean_turbulence_with_ML(n_trials=10):
             y_all[anem] = np.true_divide(np.array(df_sect_means[anem][output]    ) - y_min , (y_max  -  y_min), where=((y_max   - y_min)!=0))  # if maxs-mins==0 (dumb non-varying output) do nothing
         sectors_train = pd.concat([df_sect_means[anem]['X_sectors'] for anem in anem_to_train]).to_numpy(int)
         sectors_test  = pd.concat([df_sect_means[anem]['X_sectors'] for anem in  anem_to_test]).to_numpy(int)
+        U_test        = pd.concat([df_sect_means[anem][        'U'] for anem in  anem_to_test]).to_numpy(float)
         X_train = pd.concat([pd.DataFrame(X_all[anem]) for anem in anem_to_train]).to_numpy()
         X_test  = pd.concat([pd.DataFrame(X_all[anem]) for anem in  anem_to_test]).to_numpy()
         y_train = pd.concat([pd.DataFrame(y_all[anem]) for anem in anem_to_train]).to_numpy()
@@ -1250,11 +1251,12 @@ def predict_mean_turbulence_with_ML(n_trials=10):
             y_test = y_test[:-1, :]
             sectors_train = sectors_train[:-1]
             sectors_test = sectors_test[:-1]
+            U_test = U_test[:-1]
             n_samples_train = X_train.shape[0]
             batch_size_possibilities = np.array(sympy.divisors(n_samples_train))  # [1, 2, 4, 23, 46, 92, 4051, 8102, 16204, 93173, 186346, 372692]
             batch_size = min(batch_size_possibilities, key=lambda x: abs(x - batch_size_desired))
             batch_cond = batch_size_lims[0] < batch_size < batch_size_lims[1]
-        return X_train, y_train, X_test, y_test, batch_size, sectors_train, sectors_test
+        return X_train, y_train, X_test, y_test, batch_size, sectors_train, sectors_test, U_test
 
     # Neural network
     def train_and_test_NN(X_train, y_train, X_test, y_test, hp, print_loss_per_epoch=True, print_results=True):
@@ -1345,7 +1347,7 @@ def predict_mean_turbulence_with_ML(n_trials=10):
         for my_NN_case in my_NN_cases:
             anem_to_train = my_NN_case['anem_to_train']
             anem_to_test = my_NN_case['anem_to_test']
-            X_train, y_train, X_test, y_test, batch_size, _, _ = get_X_y_train_and_test_and_batch_size_from_anems(anem_to_train, anem_to_test, df_sect_means, df_mins_maxs)
+            X_train, y_train, X_test, y_test, batch_size, _, _, _ = get_X_y_train_and_test_and_batch_size_from_anems(anem_to_train, anem_to_test, df_sect_means, df_mins_maxs)
             print('X_train shape is:' + str(X_train.shape))
             print('batch_size shape is:' + str(batch_size))
             # Beautiful MAGIC happening
@@ -1425,7 +1427,7 @@ def predict_mean_turbulence_with_ML(n_trials=10):
             hp['activation'] = activation_fun_dict[hp['activation']]
         if type(hp['loss']) == str:
             hp['loss'] = loss_fun_dict[hp['loss']]
-        X_train, y_train, X_test, y_test, batch_size, sectors_train, sectors_test = get_X_y_train_and_test_and_batch_size_from_anems(anem_to_train, anem_to_test, df_sect_means, df_mins_maxs)
+        X_train, y_train, X_test, y_test, batch_size, sectors_train, sectors_test, U_test = get_X_y_train_and_test_and_batch_size_from_anems(anem_to_train, anem_to_test, df_sect_means, df_mins_maxs)
         hp['batch_size'] = batch_size
         y_pred, R2 = train_and_test_NN(X_train, y_train, X_test, y_test, hp=hp, print_loss_per_epoch=True, print_results=True)
 
@@ -1433,343 +1435,38 @@ def predict_mean_turbulence_with_ML(n_trials=10):
         y_pred_nonnorm = np.ndarray.flatten(y_pred.cpu().numpy()) * (df_mins_maxs['Iu'].loc['max'] - df_mins_maxs['Iu'].loc['min']) + df_mins_maxs['Iu'].loc['min']
 
         # PLOT MEANS OF PREDICTIONS
-        R2_ANN = str(np.round(R2.cpu().numpy(), 2))
+        R2_ANN = str(np.round(R2.cpu().numpy(), 3))
         Iu_EN_anem = np.array(Iu_EN[anem_to_test[0][:-2]])
         Iu_EN_at_sectors_w_data = Iu_EN_anem[sectors_test]
-        R2_with_EN = np.round(r2_score(y_test_nonnorm, Iu_EN_at_sectors_w_data), 2)
-        plt.figure(figsize=(5.5, 2.5), dpi=400)
+        R2_with_EN = np.round(r2_score(y_test_nonnorm, Iu_EN_at_sectors_w_data), 3)
+        fig, ax1 = plt.subplots(figsize=(5.5*0.93, 2.5*0.93), dpi=400/0.93)
         # plt.title(nice_str_dict[my_NN_cases[case_idx]['anem_to_test'][0]] + '.  $R^2='+ str(np.round(R2_of_means, 2))+'$')
-        plt.title(f"Sectoral averages of $I_u$ at {nice_str_dict[my_NN_cases[case_idx]['anem_to_test'][0]]}.")
+        ax1.set_title(f"Sectoral averages of $I_u$ at {nice_str_dict[my_NN_cases[case_idx]['anem_to_test'][0]]}")
         # plt.scatter(X_test_dirs_nonnorm, y_test_nonnorm, s=0.01, alpha=0.2, c='black') #, label='Measured')
-        plt.scatter(sectors_test, y_test_nonnorm, s=4, alpha=0.7, c='black', label='Measurements')
-        plt.scatter(sectors_test, y_pred_nonnorm, s=4, alpha=0.7, c='darkorange', label='ANN predictions')
+        ax1.scatter(sectors_test, y_test_nonnorm, s=12, alpha=0.6, c='black', zorder=0.98, edgecolors='none', marker='s', label='Measurements')
+        ax1.scatter(sectors_test, y_pred_nonnorm, s=12, alpha=0.6, c='darkorange', zorder=1.0, edgecolors='none', marker='o', label='ANN predictions')
         # plt.scatter(np.arange(360), Iu_EN[anem_to_test[0][:-2]], s=4, alpha=0.7, c='deepskyblue', label='NS-EN 1991-1-4')
-        plt.scatter(sectors_test, Iu_EN_at_sectors_w_data, s=4, alpha=0.7, c='deepskyblue', label='NS-EN 1991-1-4')
-        plt.legend(markerscale=2.5, loc=1)
-        plt.ylabel('$\overline{I_u}$')
-        plt.xlabel('Wind from direction [\N{DEGREE SIGN}]')
-        plt.xlim([0, 360])
-        plt.xticks([0, 45, 90, 135, 180, 225, 270, 315, 360])
-        ax = plt.gca()
-        ax.set_xticklabels(['0(N)', '45', '90(E)', '135', '180(S)', '225', '270(W)', '315', '360'])
-        plt.ylim([0, 0.6])
-        plt.tight_layout(pad=0.05)
+        ax1.scatter(sectors_test, Iu_EN_at_sectors_w_data, s=12, alpha=0.6, c='green', zorder=0.99, edgecolors='none', marker='^', label='NS-EN 1991-1-4')
+        ax2 = ax1.twinx()
+        ax2.scatter(sectors_test, U_test, s=3, alpha=0.3, color='deepskyblue', zorder=0.97, edgecolors='none', marker='D', label='$\overline{U}$')
+        # ax2.plot(sectors_test, U_test, alpha=0.3, color='deepskyblue', zorder=0.97, label='$\overline{U}$')
+        ax1.legend(markerscale=2., loc=2, handletextpad=0.1)
+        ax2.legend(markerscale=2., loc=1, handletextpad=0.1)
+        ax1.set_ylabel('$\overline{I_u}$')
+        ax2.set_ylabel('$\overline{U}\/\/\/[m/s]$')
+        ax1.set_xlabel('Wind from direction [\N{DEGREE SIGN}]')
+        ax1.set_xlim([0, 360])
+        ax1.set_xticks([0, 45, 90, 135, 180, 225, 270, 315, 360])
+        ax1.set_xticklabels(['0(N)', '45', '90(E)', '135', '180(S)', '225', '270(W)', '315', '360'])
+        ax1.set_ylim([0, 0.63])
+        ax2.set_ylim([0, 20])
+        fig.tight_layout(pad=0.05)
         plt.savefig(os.path.join(os.getcwd(), 'plots', f'{result_name_tag}_Iu_Case_{case_idx}_{anem_to_test[0]}_Umin_{U_min}_Sector-{dir_sector_amp}_ANNR2_{R2_ANN}_ENR2_{R2_with_EN}.png'))
         # plt.show()
 
-for i in range(10):
-    print(i)
-    predict_mean_turbulence_with_ML()
+
+predict_mean_turbulence_with_ML(n_trials=1)
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#
-#
-# # TRASH BELLOW @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-#
-# # REMOVING MEANS AND DIRECTIONS FROM THE INPUT DATA
-# # X_data = np.delete(X_data, [0,1], axis=1)
-#
-#
-#
-#
-# # # Getting values to predict and predicted values
-# # hp = {'lr':1.7E-1, 'batch_size':batch_size, 'weight_decay':1.85E-3, 'momentum':0.9, 'n_epochs':35,
-# #       'n_hid_layers':3, 'activation':torch.nn.ELU, 'loss':MSELoss()}
-# # y_pred, _ = train_and_test_NN(X_train, y_train, X_test, y_test, hp=hp, print_loss_per_epoch=True)
-#
-#
-#
-# # De-normalizing
-# dir_test = X_test[:,1].cpu().numpy() * X_maxs[1]
-# y_test_nonnorm  = np.squeeze(y_test.cpu().numpy()) * y_PDF_maxs
-# y_pred_nonnorm = np.squeeze(y_pred.cpu().numpy()) * y_PDF_maxs
-#
-# # From PREDICTED Weibull to PREDICTED data
-# y_pred_samples = stats.exponweib.rvs(1, y_pred_nonnorm[:,0], 0, y_pred_nonnorm[:,1], size=len(y_pred_nonnorm))
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-# # Plotting PREDICTED data by anemometer
-# # density_scatter(np.deg2rad(X_data_nonnorm[test_idxs,1]), y_pred_samples)
-# # plt.title(f'Synthetic data from predicted Weibull params. \n {anem_to_test}')
-# # plt.ylim([0, 4])
-# # ax.text(np.deg2rad(18), 4.4, '$\sigma(u)\/[m/s]$')
-# # plt.tight_layout()
-# # plt.savefig(os.path.join(os.getcwd(), 'plots', f'predicted_synth_std_u_{anem_to_test}.png'))
-# # plt.show()
-#
-#
-# x = np.deg2rad(X_data_nonnorm[test_idxs,1])
-# y1 = y_data_nonnorm[test_idxs]
-# y2 = y_pred_samples
-#
-# data1, x1_e, y1_e = np.histogram2d(np.sin(x) * y1, np.cos(x) * y1, bins=30, density=True)
-# data2, x2_e, y2_e = np.histogram2d(np.sin(x) * y2, np.cos(x) * y2, bins=[x1_e, y1_e], density=True)
-# x1_i = 0.5 * (x1_e[1:] + x1_e[:-1])
-# y1_i = 0.5 * (y1_e[1:] + y1_e[:-1])
-# x2_i = 0.5 * (x2_e[1:] + x2_e[:-1])
-# y2_i = 0.5 * (y2_e[1:] + y2_e[:-1])
-# z1 = interpn((x1_i, y1_i), data1, np.vstack([np.sin(x) * y1, np.cos(x) * y1]).T, method="splinef2d", bounds_error=False)
-# z2 = interpn((x2_i, y2_i), data2, np.vstack([np.sin(x) * y2, np.cos(x) * y2]).T, method="splinef2d", bounds_error=False)
-# z1[np.where(np.isnan(z1))] = 0.0  # To be sure to plot all data
-# z2[np.where(np.isnan(z2))] = 0.0  # To be sure to plot all data
-# idx1 = z1.argsort()  # Sort the points by density, so that the densest points are plotted last
-# idx2 = z2.argsort()  # Sort the points by density, so that the densest points are plotted last
-# x1, y1, z1 = x[idx1], y1[idx1], z1[idx1]
-# x2, y2, z2 = x[idx2], y2[idx2], z2[idx2]
-# # 1st plot
-# fig, ax = plt.subplots(figsize=(8, 6), dpi=300, subplot_kw={'projection': 'polar'})
-# ax.set_theta_zero_location("N")
-# ax.set_theta_direction(-1)
-# ax.scatter(x1, y1, c=z1, s=1, alpha=0.3)
-# norm = Normalize(vmin=np.min([z1, z2]), vmax=np.max([z1, z2]))
-# cbar = fig.colorbar(cm.ScalarMappable(norm=norm), ax=ax)
-# cbar.ax.set_ylabel('Density')
-# plt.title(f'Measured. {anem_to_test}')
-# plt.ylim([0, 4])
-# ax.text(np.deg2rad(20), 4.4, '$\sigma(u)\/[m/s]$')
-# plt.tight_layout()
-# plt.savefig(os.path.join(os.getcwd(), 'plots', f'__measured_std_u_{anem_to_test}.png'))
-# plt.show()
-# # 2nd plot
-# fig, ax = plt.subplots(figsize=(8, 6), dpi=300, subplot_kw={'projection': 'polar'})
-# ax.set_theta_zero_location("N")
-# ax.set_theta_direction(-1)
-# ax.scatter(x2, y2, c=z2, s=1, alpha=0.3)
-# norm = Normalize(vmin=np.min([z1, z2]), vmax=np.max([z1, z2]))
-# cbar = fig.colorbar(cm.ScalarMappable(norm=norm), ax=ax)
-# cbar.ax.set_ylabel('Density')
-# plt.title(f'Synthetic from predicted Weibull params. {anem_to_test}')
-# plt.ylim([0, 4])
-# ax.text(np.deg2rad(20), 4.4, '$\sigma(u)\/[m/s]$')
-# plt.tight_layout()
-# plt.savefig(os.path.join(os.getcwd(), 'plots', f'PREDICTED_synth_std_u_{anem_to_test}.png'))
-# plt.show()
-#
-#
-#
-#
-# # plt.plot(y_test_nonnorm[4500:5000,1], label = 'Test')
-# # plt.plot(y_pred_nonnorm[4500:5000,1], label = 'Pred')
-# # plt.legend()
-# # plt.show()
-#
-#
-#
-# ##################################################################################################################
-# # WEIBULL PARAMS - TRAINING FROM 18 ALTERNATE-10-DEG-WIDE-WIND-SECTORS AND TESTING THE REMAINING 18 SECTORS, AT EACH ANEMOMETER
-# ##################################################################################################################
-# # todo: copied from the std_u section. Needs to be adapted to Weibull params
-#
-# # Remove the direction, to be extra certain that the NN doesn't "cheat"
-# # X_data = np.delete(X_data, 1, axis=1) # NOT WORKING FOR THE BEAUTIFUL PLOTS THAT WILL REQUIRE THESE VALUES
-#
-# # Separating training and testing data
-# # train_angle_domain = [[x, x+22.5] for x in np.arange(0, 360, 45)]  # in degrees
-# # test_angle_domain  = [[x+22.5, x+45] for x in np.arange(0, 360, 45)]  # in degrees
-# train_angle_domain = [[x, x+20] for x in np.arange(0, 360, 60)]  # in degrees
-# test_angle_domain  = [[x+35, x+45] for x in np.arange(0, 360, 60)]  # in degrees
-# train_bools = np.logical_or.reduce([(a[0]<X_data_nonnorm[:,1]) & (X_data_nonnorm[:,1]<a[1]) for a in train_angle_domain])  # https://stackoverflow.com/questions/20528328/numpy-logical-or-for-more-than-two-arguments
-# test_bools =  np.logical_or.reduce([(a[0]<X_data_nonnorm[:,1]) & (X_data_nonnorm[:,1]<a[1]) for a in test_angle_domain])
-# X_train = Tensor(X_data[train_bools]).to(device)
-# y_train = Tensor(y_PDF_data[train_bools]).to(device)
-# X_test =  Tensor(X_data[test_bools]).to(device)
-# y_test =  Tensor(y_PDF_data[test_bools]).to(device)
-#
-# n_samples_train = X_train.shape[0]
-# batch_size_possibilities = sympy.divisors(n_samples_train)  # [1, 2, 4, 23, 46, 92, 4051, 8102, 16204, 93173, 186346, 372692]
-#
-#
-# # Getting values to predict and predicted values
-# hp = {'lr':1E-1, 'batch_size':6329, 'weight_decay':1E-4, 'momentum':0.9, 'n_epochs':25, 'n_hid_layers':1, 'activation':torch.nn.ReLU, 'loss':MSELoss()}
-# y_pred = train_and_test_NN(X_train, y_train, X_test, y_test, hp=hp, print_loss_per_epoch=True)
-#
-# # Choosing only the results of a given anemometer (e.g. svar -> Svarvahelleholmen)
-# anem_train = np.searchsorted(start_idxs_of_each_anem, np.where(train_bools)[0], side='right') - 1  # to which anemometer, (indexed from all_anem_list), does each test sample belong to
-# anem_test =  np.searchsorted(start_idxs_of_each_anem, np.where(test_bools )[0], side='right') - 1
-# train_idxs_svar = np.where(anem_train == np.where(all_anem_list == 'svar_A')[0])[0]
-# test_idxs_svar  = np.where(anem_test  == np.where(all_anem_list == 'svar_A')[0])[0]
-# X_train_svar = X_train[train_idxs_svar].cpu().numpy()
-# y_train_svar = np.squeeze(y_train[train_idxs_svar].cpu().numpy())  # simply converting to numpy and removing the empty dimension of the shape (n_train_samples,1)
-# X_test_svar = X_test[test_idxs_svar].cpu().numpy()
-# y_test_svar = np.squeeze(y_test[test_idxs_svar].cpu().numpy())  # simply converting to numpy and removing the empty dimension of the shape (n_test_samples,1)
-# y_pred_svar = np.squeeze(y_pred[test_idxs_svar].cpu().numpy())  # simply converting to numpy and removing the empty dimension of the shape (n_test_samples,1)
-#
-# # De-normalizing
-# dir_train_svar = X_train_svar[:,1] * X_maxs[1]
-# dir_test_svar = X_test_svar[:,1] * X_maxs[1]
-# std_u_train_svar = y_train_svar * y_max
-# std_u_test_svar  = y_test_svar * y_max
-# std_u_pred_svar = y_pred_svar * y_max
-#
-# # Organizing the results into sectors
-# train_sector_bools = [(a[0]<dir_train_svar) & (dir_train_svar<a[1]) for a in train_angle_domain]
-# test_sector_bools  = [(a[0]<dir_test_svar)  & (dir_test_svar<a[1])  for a in test_angle_domain]
-# train_sector_idxs = [np.where(train_sector_bools[i])[0] for i in range(len(train_sector_bools))]
-# test_sector_idxs  = [np.where(test_sector_bools[i] )[0] for i in range(len(test_sector_bools ))]
-# dir_means_train_per_sector_svar =   np.array([np.mean(dir_train_svar[l]) for l in train_sector_idxs])
-# dir_means_test_per_sector_svar  =   np.array([np.mean(dir_test_svar[l] ) for l in test_sector_idxs ])
-# std_u_means_train_per_sector_svar = np.array([np.mean(std_u_train_svar[l]) for l in train_sector_idxs])
-# std_u_means_test_per_sector_svar  = np.array([np.mean(std_u_test_svar[l]) for l in test_sector_idxs])
-# std_u_means_pred_per_sector_svar = np.array([np.mean(std_u_pred_svar[l]) for l in test_sector_idxs])
-# std_u_std_train_per_sector_svar = np.array([np.std(std_u_train_svar[l]) for l in train_sector_idxs])
-# std_u_std_test_per_sector_svar  = np.array([np.std(std_u_test_svar[l] ) for l in test_sector_idxs ])
-# std_u_std_pred_per_sector_svar =   np.array([np.std( std_u_pred_svar[l]) for l in test_sector_idxs])
-#
-# # Plotting beautiful plots
-# fig = plt.figure(figsize=(8,6), dpi=400)
-# ax = fig.add_subplot(projection='polar')
-# plt.title('Anemometer at Svarvahelleholmen (Z = 48 m)\n')
-# ax.set_theta_zero_location("N")
-# ax.set_theta_direction(-1)
-# ax.scatter( np.deg2rad(dir_train_svar), std_u_train_svar, s=1, alpha=0.6, c='lightgreen', label='Training data')
-# ax.scatter( np.deg2rad(dir_test_svar) , std_u_test_svar , s=1, alpha=0.6, c='skyblue', label='Testing data')
-# ax.errorbar(np.deg2rad(dir_means_train_per_sector_svar), std_u_means_train_per_sector_svar, std_u_std_train_per_sector_svar, c='forestgreen', elinewidth=3, alpha=0.9, fmt='.', label='$\sigma(train)$')
-# ax.errorbar(np.deg2rad(dir_means_test_per_sector_svar) , std_u_means_test_per_sector_svar , std_u_std_test_per_sector_svar , c='dodgerblue', elinewidth=4, alpha=0.8, fmt='o', label='$\sigma(test)$')
-# ax.errorbar(np.deg2rad(dir_means_test_per_sector_svar) , std_u_means_pred_per_sector_svar , std_u_std_pred_per_sector_svar , c='orange', elinewidth=2, alpha=0.9, fmt='.', label='Prediction', zorder=5)
-# handles, labels = ax.get_legend_handles_labels()
-# plt.ylim((None,4))
-# ax.text(np.deg2rad(18), 4.4, '$\sigma(u)\/[m/s]$')
-# plt.savefig(os.path.join(os.getcwd(), 'plots', 'std_u_Svar.png'))
-# plt.show()
-# fig = plt.figure(figsize=(2, 1.6), dpi=400)
-# plt.axis('off')
-# plt.legend(handles, labels)
-# plt.savefig(os.path.join(os.getcwd(), 'plots', 'std_u_Svar_legend.png'))
-# plt.show()
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-# # TRASH:
-# # OLD VERSION USING curve_fit and my own weibull function. It didn't work properly
-# # n_bins = 100
-# # hist = np.histogram(y_data_nonnorm[idxs_360dir], bins=n_bins, density=True)
-# # hist_x = [(a+b)/2 for a,b in zip(hist[1][:-1], hist[1][1:])]
-# # hist_y = hist[0]
-# # try:
-# #     popt, pcov = curve_fit(weibull_PDF, hist_x, hist_y)  # param. optimal values, param estimated covariance
-# # except:
-# #     print(f'exception at anem {anem_idx} for dir {d}')
-# #     popt, pcov = curve_fit(weibull_PDF, hist_x, hist_y, bounds=(1E-5, 10))
-# # plt.plot(weibull_x, weibull_PDF(weibull_x, *popt), label='my_func')
-# # plt.plot(weibull_x, weibull_PDF(weibull_x, *popt2), label='weibfit')
-#
-#
-# # PLOTTING HISTOGRAMS AND PDF FITS
-# anem_idx = 3
-# d = 45
-# anem_slice = slice(start_idxs_of_each_anem_2[anem_idx], start_idxs_of_each_anem_2[anem_idx + 1])
-# idxs_360dir = np.where(X_dir_sectors[anem_slice] == d)[0]
-# if len(idxs_360dir) > 10 :  # minimum number of datapoints, otherwise -> np.nan
-#     params_weib    = stats.exponweib.fit(y_data_nonnorm[anem_slice][idxs_360dir], floc=0, f0 = 1)  # params = a(alpha), c(shape==k), loc, scale(lambda)
-#     params_expweib = stats.exponweib.fit(y_data_nonnorm[anem_slice][idxs_360dir], floc=0)
-#     params_expweib2 = stats.exponweib.fit(y_data_nonnorm[anem_slice][idxs_360dir])
-#     params_rayleigh = stats.rayleigh.fit(y_data_nonnorm[anem_slice][idxs_360dir], floc=0)
-#
-#     plt.figure()
-#     plt.title(f'Wind from {dir_sectors[d]}$\u00B0C$ to {dir_sectors[d+1]}$\u00B0C$. Anemometer: "{all_anem_list[anem_idx]}"')
-#     weibull_x = np.linspace(0, 5, 100)
-#     plt.plot(weibull_x, stats.exponweib.pdf(weibull_x, *params_weib   ), label='Weibull fit (2 parameters)', lw=3, alpha=0.8)
-#     plt.plot(weibull_x, stats.exponweib.pdf(weibull_x, *params_expweib), label='Exp. Weibull fit (3 parameters)', lw=3, alpha=0.8)
-#     plt.plot(weibull_x, stats.exponweib.pdf(weibull_x, *params_expweib2), label='Exp. Weibull fit 2 (4 parameters)', lw=3, alpha=0.8)
-#     plt.hist(y_data_nonnorm[anem_slice][idxs_360dir], bins=50, density=True, label='Normalized histogram of $\sigma(u)$', alpha=0.5)
-#     plt.xlim([0,5])
-#     plt.legend()
-#     plt.show()
-#
-#
-#
-#
-# # Testing visually manually that the two new masts are correctly oriented
-# import json
-# with open(r'C:\Users\bercos\PycharmProjects\Metocean\processed_data\00-10-00_stats_2015-11-01_00-00-00_2015-12-01_00-00-00', "r") as json_file:
-#     pro_data_1 = json.load(json_file)
-# with open(r'C:\Users\bercos\PycharmProjects\Metocean\processed_data_2\00-10-00_stats_2015-11-01_00-00-00_2015-12-01_00-00-00', "r") as json_file:
-#     pro_data_2 = json.load(json_file)
-#
-# from find_storms import organized_dataframes_of_storms
-# min10_df_all_means, min10_df_all_dirs, min10_df_all_Iu, min10_df_all_Iv, min10_df_all_Iw, min10_df_all_avail = organized_dataframes_of_storms(foldername='processed_data_2',
-#                                                                                                                                               compiled_fname='00-10-00_stats_2015-11-01_00-00-00_2015-12-01_00-00-00',
-#                                                                                                                                               mast_list=['land','neso'])
-#
-#
-#
-#
-# # TRASH PLOTS
-# # plt.figure(figsize=(20,5))
-# # plt.plot(df_air_temp['temperature_1'].dropna(),     alpha=0.2, lw=0.5)
-# # plt.plot(df_air_temp['temperature_2'].dropna(),     alpha=0.2, lw=0.5)
-# # # plt.plot(df_air_temp['temperature_3'].dropna(),     alpha=0.2, lw=0.5)
-# # plt.plot(df_air_temp['temperature_final'].dropna(), alpha=0.5, lw=0.5, label='smooth')
-# # plt.legend()
-# # plt.ylim([0,20])
-# # plt.show()
 
 

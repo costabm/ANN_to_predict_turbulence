@@ -58,16 +58,17 @@ def plot_elevation_profile(point_1, point_2, step_distance, list_of_distances):
     sea_idxs = np.where(heights==0)[0]
     land_idxs = np.where(heights!=0)[0]
 
-    plt.figure(dpi=400, figsize=(5,1.8))
+    plt.figure(dpi=400/0.85, figsize=(5*0.85,1.8*0.85))
     plt.title('Upstream terrain profile')
     plt.plot(dists[land_idxs], heights[land_idxs], c='peru' , linestyle='-', linewidth=1, zorder=1.9) #c='peru')
     plt.scatter(dists[land_idxs], heights[land_idxs], c='peru' , s=1, label='Ground') #c='peru')
     plt.scatter(dists[sea_idxs], heights[sea_idxs], c='skyblue', s=2, label='Sea', zorder=2)  # c='peru')
-    plt.xlabel('Distance upstream [m]')
+    plt.xlabel('Upstream distance [m]')
     plt.ylabel('Height [m]')
-    plt.ylim([-10, 400])
-    plt.legend(markerscale=4)
-    plt.tight_layout()
+    plt.ylim([-10, 450])
+    plt.yticks([0,200,400])
+    plt.legend(markerscale=3, handletextpad=0.1)
+    plt.tight_layout(pad=0.05)
     plt.savefig('plots/TerrainProfile_example.png')
     plt.show()
 
@@ -82,7 +83,7 @@ def plot_elevation_profile(point_1, point_2, step_distance, list_of_distances):
 
     new_normalized_heights = (new_heights - Z_mins) / (Z_maxs - Z_mins)
 
-    plt.figure(dpi=400, figsize=(5,1.8))
+    plt.figure(dpi=400/0.85, figsize=(5*0.85,1.8*0.85))
     plt.title('Z vector')
     # NEW:
     plt.plot(new_dists, new_normalized_heights, c='black', linestyle='--', alpha=0.6, linewidth=1) #c='peru')
@@ -90,23 +91,26 @@ def plot_elevation_profile(point_1, point_2, step_distance, list_of_distances):
     # OLD:
     # plt.plot(new_dists, new_heights, c='black', linestyle='--', alpha=0.6, linewidth=1) #c='peru')
     # plt.scatter(new_dists, new_heights, c='black', s=3, label='Ground')  # c='peru')
-    plt.xlabel('Distance upstream [m]')
+    plt.xlabel('Upstream distance [m]')
     plt.ylabel('Norm. height')
     plt.ylim([-0.05, 1.05])
-    plt.tight_layout()
+    plt.yticks([0,1])
+    ax = plt.gca()
+    ax.set_yticklabels(['    0', '    1'])
+    plt.tight_layout(pad=0.05)
     plt.savefig('plots/TerrainProfile_2_example.png')
     plt.show()
 
-    plt.figure(dpi=400, figsize=(5,1.8))
+    plt.figure(dpi=400/0.85, figsize=(5*0.85,1.8*0.85))
     plt.title('R vector')
     plt.scatter(new_dists[new_sea_idxs], np.zeros(len(new_sea_idxs)), c='black', s=2, label='Ground')  # c='peru')
     plt.scatter(new_dists[new_land_idxs], np.ones(len(new_land_idxs)), c='black', s=2, label='Ground')  # c='peru')
-    plt.xlabel('Distance upstream [m]')
-    plt.ylabel('Norm. roughness')
+    plt.xlabel('Upstream distance [m]')
+    plt.ylabel('Norm. rough.')
     plt.yticks([0,1])
     ax = plt.gca()
-    ax.set_yticklabels(['   0', '   1'])
-    plt.tight_layout()
+    ax.set_yticklabels(['    0', '    1'])
+    plt.tight_layout(pad=0.05)
     plt.savefig('plots/TerrainProfile_3_example.png')
     plt.show()
 
@@ -142,8 +146,8 @@ def plot_elevation_profile(point_1, point_2, step_distance, list_of_distances):
     cb.set_label('Height [m]')
     handles, labels = plt.gca().get_legend_handles_labels()
     order = [1, 0]
-    plt.legend([handles[idx] for idx in order], [labels[idx] for idx in order])
-    plt.tight_layout()
+    plt.legend([handles[idx] for idx in order], [labels[idx] for idx in order], handletextpad=0.1)
+    plt.tight_layout(pad=0.05)
     plt.savefig('plots/2D_map_2_points_example.png')
     plt.show()
     pass
