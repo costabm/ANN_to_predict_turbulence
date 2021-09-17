@@ -14,6 +14,7 @@ from collections import Counter
 import sympy
 import numpy as np
 import pandas as pd
+import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib import cm
 from matplotlib.colors import Normalize
@@ -33,6 +34,8 @@ import optuna
 from elevation_profile_generator import elevation_profile_generator, plot_elevation_profile, get_point2_from_point1_dir_and_dist
 from sklearn.metrics import r2_score
 from orography import synn_EN_33, svar_EN_33, osp1_EN_33, osp2_EN_33, land_EN_33, neso_EN_33
+from create_minigrid_data_from_raw_WRF_500_data import bridge_WRF_nodes_coor_func, rad, deg
+
 
 
 print('Osp2_A is now being attempted, instead of Osp1_A')
@@ -96,8 +99,8 @@ def example_of_elevation_profile_at_given_point_dir_dist(point_1=[-34625., 67000
         plot_elevation_profile(point_1=point_1, point_2=point_2, step_distance=step_distance, list_of_distances=list_of_distances)
     return dists, heights
 
-example_of_elevation_profile_at_given_point_dir_dist(point_1=[-34625., 6700051.], direction_deg=160, step_distance=False, total_distance=False,
-                                                   list_of_distances=[i*(5.+5.*i) for i in range(45)], plot=True)
+# example_of_elevation_profile_at_given_point_dir_dist(point_1=[-34625., 6700051.], direction_deg=160, step_distance=False, total_distance=False,
+#                                                    list_of_distances=[i*(5.+5.*i) for i in range(45)], plot=True)
 
 
 def slopes_in_deg_from_dists_and_heights(dists, heights):
@@ -146,7 +149,7 @@ def plot_topography_per_anem(list_of_degs = list(range(360)), list_of_distances=
         if plot_slopes:
             cmap = copy.copy(plt.get_cmap('seismic'))
             fig, (ax, cax) = plt.subplots(nrows=2, figsize=(5.5, 2.3 + 0.5), dpi=400, gridspec_kw={"height_ratios": [1, 0.05]})
-            im = ax.pcolormesh(degs, 6[0], slopes_all_dirs.T, cmap=cmap, shading='auto') #, vmin = -30., vmax = 30.)
+            im = ax.pcolormesh(degs, dists_all_dirs[0], slopes_all_dirs.T, cmap=cmap, shading='auto') #, vmin = -30., vmax = 30.)
             ax.set_title(nice_str_dict[anem + '_A'] + ': ' + 'Upstream slopes;')
             ax.set_xticks([0, 45, 90, 135, 180, 225, 270, 315, 360])
             ax.set_xticklabels(['0(N)', '45', '90(E)', '135', '180(S)', '225', '270(W)', '315', '360'])
@@ -161,7 +164,7 @@ def plot_topography_per_anem(list_of_degs = list(range(360)), list_of_distances=
             plt.show()
     return None
 
-plot_topography_per_anem(list_of_degs = list(range(360)), list_of_distances=[i*(5.+5.*i) for i in range(45)], plot_topography=True, plot_slopes=False)
+# plot_topography_per_anem(list_of_degs = list(range(360)), list_of_distances=[i*(5.+5.*i) for i in range(45)], plot_topography=True, plot_slopes=False)
 
 
 def get_heights_from_X_dirs_and_dists(point_1, array_of_dirs, cone_angles, dists):
@@ -411,7 +414,6 @@ def get_all_Iu_with_eurocode():
             numerator = IuA * vmA * (1-xB/10) + IuB * vmB * xB/10
             Iu[anem].append(numerator / denominator)
     return Iu
-
 
 Iu_EN = get_all_Iu_with_eurocode()
 
@@ -1129,7 +1131,6 @@ def predict_turbulence_with_ML(n_trials=50):
 #     print(i)
 #     predict_turbulence_with_ML()
 
-
 def predict_mean_turbulence_with_ML(n_trials):
     # Do the same as before, but using only topographic data, and mean Iu! The total number of samples will be greatly reduced, to only 360*6!
     result_name_tag = 'A'  # add this to the plot names and hp_opt text file
@@ -1463,9 +1464,12 @@ def predict_mean_turbulence_with_ML(n_trials):
         fig.tight_layout(pad=0.05)
         plt.savefig(os.path.join(os.getcwd(), 'plots', f'{result_name_tag}_Iu_Case_{case_idx}_{anem_to_test[0]}_Umin_{U_min}_Sector-{dir_sector_amp}_ANNR2_{R2_ANN}_ENR2_{R2_with_EN}.png'))
         # plt.show()
+    return None
 
 
-predict_mean_turbulence_with_ML(n_trials=1)
+# predict_mean_turbulence_with_ML(n_trials=1)
+
+
 
 
 

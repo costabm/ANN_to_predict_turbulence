@@ -5,7 +5,7 @@ import netCDF4  # necessary to open the raw data. https://unidata.github.io/netc
 from create_minigrid_data_from_raw_WRF_500_data import bridge_WRF_nodes_coor_func
 
 # Getting the already pre-processed data (mini-grid of the relevant WRF 500m datapoints that are near the bridge)
-dataset = netCDF4.Dataset(os.path.join(os.getcwd(), r'WRF_500m_minigrid.nc'), 'r')
+dataset = netCDF4.Dataset(os.path.join(os.getcwd(), r'WRF_500_interpolated', 'WRF_500m_minigrid.nc'), 'r')
 lats_grid = dataset['latitudes'][:].data
 lons_grid = dataset['longitudes'][:].data
 ws_grid = dataset['ws'][:].data
@@ -24,7 +24,7 @@ ws_interp = np.array([griddata(points=(lats_grid,lons_grid), values=ws_grid[:,t]
 wd_interp = np.array([griddata(points=(lats_grid,lons_grid), values=wd_grid[:,t], xi=(lats_bridge, lons_bridge), method='linear') for t in range(n_time_points)]).transpose()
 
 # Saving the newly obtained WRF dataset at the bridge nodes
-bridgedataset = netCDF4.Dataset(os.path.join(os.getcwd(), r'WRF_at_bridge_nodes.nc'), 'w', format='NETCDF4')
+bridgedataset = netCDF4.Dataset(os.path.join(os.getcwd(), r'WRF_500_interpolated', r'WRF_at_bridge_nodes.nc'), 'w', format='NETCDF4')
 bridgedataset.createDimension('n_nodes', n_bridge_nodes)
 bridgedataset.createDimension('n_time_points', n_time_points)
 bridgedataset_lats = bridgedataset.createVariable('latitudes', 'f4', ('n_nodes',))  # f4: 32-bit signed floating point
