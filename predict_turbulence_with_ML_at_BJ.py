@@ -2,7 +2,7 @@
 This study uses Machine Learning to predict turbulence at a new location with a given topography, where the learning data
 consists only of turbulence data and topography data at other nearby locations.
 THIS VERSION USES ALL 6 ANEMOMETERS TO ESTIMATE TURBULENCE AT DIFFERENT POINTS ALONG THE BJØRNAFJORD
-Created: June, 2021
+Created: September, 2021
 Contact: bercos@vegvesen.no
 """
 
@@ -38,31 +38,40 @@ from orography import synn_EN_33, svar_EN_33, osp1_EN_33, osp2_EN_33, land_EN_33
 from create_minigrid_data_from_raw_WRF_500_data import bridge_WRF_nodes_coor_func, rad, deg
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')  # 'cuda' or 'cpu'. 'cuda' doesn't seem to be working...
 
+
 ########################################################################################################################################################################################################
 # PREDICTING TURBULENCE ALONG THE BJØRNAFJORD:
 ########################################################################################################################################################################################################
-# Getting bridge nodes
+
+# Anemometer coordinates
+anem_nice_str = {'osp1_A': 'Ospøya 1', 'osp2_A': 'Ospøya 2', 'osp2_B': 'Ospøya 2', 'synn_A': 'Synnøytangen', 'svar_A': 'Svarvhelleholmen', 'land_A': 'Landrøypynten', 'neso_A': 'Nesøya'}
+anem_EN_33 = {'synn': synn_EN_33, 'svar': svar_EN_33, 'osp1': osp1_EN_33, 'osp2': osp2_EN_33, 'land': land_EN_33, 'neso': neso_EN_33}
+# Getting bridge node coordinates
 n_bridge_nodes = 11
-coors_bridge = bridge_WRF_nodes_coor_func(n_bridge_WRF_nodes = n_bridge_nodes, unit='deg')
+latlons_bridge = bridge_WRF_nodes_coor_func(n_bridge_WRF_nodes = n_bridge_nodes, unit='deg')
 # to convert from Lat/Lon to UTM-33, use the website: https://www.kartverket.no/en/on-land/posisjon/transformere-koordinater-enkeltvis
 assert n_bridge_nodes == 11, "n_bridge_nodes needs to be 11. Otherwise, you need to manually create the new array of bridge node coordinates, using the website above"
-coors_bridge = np.array([[-34449.260, 6699999.046],
-                         [-34244.818, 6700380.872],
-                         [-34057.265, 6700792.767],
-                         [-33888.469, 6701230.609],
-                         [-33740.109, 6701690.024],
-                         [-33613.662, 6702166.417],
-                         [-33510.378, 6702655.026],
-                         [-33431.282, 6703150.969],
-                         [-33377.153, 6703649.290],
-                         [-33348.522, 6704145.006],
-                         [-33345.665, 6704633.167]])
+bj_coors = np.array([[-34449.260, 6699999.046],
+                     [-34244.818, 6700380.872],
+                     [-34057.265, 6700792.767],
+                     [-33888.469, 6701230.609],
+                     [-33740.109, 6701690.024],
+                     [-33613.662, 6702166.417],
+                     [-33510.378, 6702655.026],
+                     [-33431.282, 6703150.969],
+                     [-33377.153, 6703649.290],
+                     [-33348.522, 6704145.006],
+                     [-33345.665, 6704633.167]])
 bj_pts_EN_33 = {}
 bj_pts_nice_str = {}
 for i in range(n_bridge_nodes):
-    bj_pts_EN_33['bj'+f'{i+1:02}']=coors_bridge[i].tolist()
+    bj_pts_EN_33['bj'+f'{i+1:02}']=bj_coors[i].tolist()
     bj_pts_nice_str['bj'+f'{i+1:02}']='Bjørnafjord P'+str(i+1)
-
+# Merging dictionaries (anems + bj_pts) into one dict all_pts
+all_pts_EN_33 = dict(anem_EN_33)
+all_pts_EN_33.update(bj_pts_EN_33)
+all_pts_nice_str = dict(anem_nice_str)
+all_pts_nice_str.update(bj_pts_nice_str)
 
 class LogCoshLoss(torch.nn.Module):
     def __init__(self):
@@ -79,38 +88,6 @@ def convert_angle_to_0_2pi_interval(angle, input_and_output_in_degrees=True):
         return angle % (2*np.pi)
 
 
-def moving_average(a, n) :
-    ret = np.cumsum(a, dtype=float)
-    ret[n:] = ret[n:] - ret[:-n]
-    return ret[n - 1:] / n
-
-
-def density_scatter(x , y, ax = None, sort = True, bins = 20, **kwargs )   :
-    """
-    Scatter plot colored by 2d histogram
-    """
-    if ax is None :
-        fig , ax = plt.subplots(figsize=(8,6), dpi=400, subplot_kw={'projection': 'polar'})
-        ax.set_theta_zero_location("N")
-        ax.set_theta_direction(-1)
-    data , x_e, y_e = np.histogram2d(np.sin(x)*y, np.cos(x)*y, bins = bins, density = True)
-    # z = interpn( ( 0.5*(x_e[1:] + x_e[:-1]) , 0.5*(y_e[1:]+y_e[:-1]) ) , data , np.vstack([x,y]).T , method = "splinef2d", bounds_error = False)
-    x_i = 0.5 * (x_e[1:] + x_e[:-1])
-    y_i = 0.5 * (y_e[1:] + y_e[:-1])
-    z = interpn((x_i, y_i), data, np.vstack([np.sin(x)*y, np.cos(x)*y]).T, method="splinef2d", bounds_error=False)
-    #To be sure to plot all data
-    z[np.where(np.isnan(z))] = 0.0
-    # Sort the points by density, so that the densest points are plotted last
-    if sort :
-        idx = z.argsort()
-        x, y, z = x[idx], y[idx], z[idx]
-    ax.scatter( x, y, c=z, s=1, alpha=0.3, **kwargs )
-    norm = Normalize(vmin = np.min(z), vmax = np.max(z))
-    cbar = fig.colorbar(cm.ScalarMappable(norm = norm), ax=ax)
-    cbar.ax.set_ylabel('Density')
-    return ax, np.min(z), np.max(z)
-
-
 def example_of_elevation_profile_at_given_point_dir_dist(point_1, direction_deg=160, step_distance=False, total_distance=False,
                                                          list_of_distances=[i*(5.+5.*i) for i in range(45)], plot=True):
     point_2 = get_point2_from_point1_dir_and_dist(point_1=point_1, direction_deg=direction_deg, distance=list_of_distances[-1] if list_of_distances else total_distance)
@@ -118,19 +95,12 @@ def example_of_elevation_profile_at_given_point_dir_dist(point_1, direction_deg=
     if plot:
         plot_elevation_profile(point_1=point_1, point_2=point_2, step_distance=step_distance, list_of_distances=list_of_distances)
     return dists, heights
-
-example_of_elevation_profile_at_given_point_dir_dist(point_1=coors_bridge[5], direction_deg=160, step_distance=False, total_distance=False,
-                                                   list_of_distances=[i*(5.+5.*i) for i in range(45)], plot=True)
-
-
-def slopes_in_deg_from_dists_and_heights(dists, heights):
-    delta_dists = dists[1:] - dists[:-1]
-    delta_heights = heights[1:] - heights[:-1]
-    return np.rad2deg(np.arctan(delta_heights/delta_dists))
+# example_of_elevation_profile_at_given_point_dir_dist(point_1=bj_coors[5], direction_deg=160, step_distance=False, total_distance=False,
+#                                                    list_of_distances=[i*(5.+5.*i) for i in range(45)], plot=True)
 
 
 def plot_topography_per_point(list_of_degs = list(range(360)), list_of_distances=[i*(5.+5.*i) for i in range(45)]):
-    for pt, pt_coor in bj_pts_EN_33.items():
+    for pt, pt_coor in all_pts_EN_33.items():
         dists_all_dirs = []
         heights_all_dirs = []
         degs = []
@@ -162,8 +132,7 @@ def plot_topography_per_point(list_of_degs = list(range(360)), list_of_distances
         # plt.savefig(os.path.join(os.getcwd(), 'plots', f'Topography_per_point-{pt}.png'))
         plt.show()
     return None
-
-plot_topography_per_point(list_of_degs = list(range(360)), list_of_distances=[i*(5.+5.*i) for i in range(45)])
+# plot_topography_per_point(list_of_degs = list(range(360)), list_of_distances=[i*(5.+5.*i) for i in range(45)])
 
 
 def get_heights_from_X_dirs_and_dists(point_1, array_of_dirs, cone_angles, dists):
@@ -175,13 +144,11 @@ def get_heights_from_X_dirs_and_dists(point_1, array_of_dirs, cone_angles, dists
     return np.array(heights)
 
 
-windward_dists = [i*(5. + 5.*i) for i in range(45)]
-leeward_dists =  [i*(10.+10.*i) for i in range(10)]
-side_dists =     [i*(10.+10.*i) for i in range(10)]
-
-
-def get_all_10_min_data_at_z_48m(U_min = 0, windward_dists=windward_dists, leeward_dists=leeward_dists, side_dists=side_dists):
+def get_all_10_min_data_at_z_48m(U_min = 0):
     print('Collecting all 10-min wind data... (takes 10-60 minutes)')
+    windward_dists = [i * ( 5. +  5. * i) for i in range(45)]
+    leeward_dists =  [i * (10. + 10. * i) for i in range(10)]
+    side_dists =     [i * (10. + 10. * i) for i in range(10)]
     min10_df_all_means, min10_df_all_dirs, min10_df_all_Iu, min10_df_all_Iv, min10_df_all_Iw, min10_df_all_avail = merge_two_all_stats_files()
     assert min10_df_all_means['ts'].equals(min10_df_all_dirs['ts'])
     assert min10_df_all_dirs['ts'].equals(min10_df_all_Iu['ts'])
@@ -249,29 +216,9 @@ def get_all_10_min_data_at_z_48m(U_min = 0, windward_dists=windward_dists, leewa
     return  X_data, y_data, all_anem_list, start_idxs_of_each_anem, ts_data, other_data
 
 
-def get_df_of_merged_temperatures(list_of_file_paths, label_to_read='Lufttemperatur', smooth_str='3600s'):
-    list_of_dfs = [pd.read_csv(file, delimiter=';', skipfooter=1, engine='python') for file in list_of_file_paths]
-    n_files = len(list_of_dfs)
-    for i in range(n_files):  # converting the timestamps to datetime objects
-        list_of_dfs[i]['Tid(norsk normaltid)'] = pd.to_datetime(list_of_dfs[i]['Tid(norsk normaltid)'], format='%d.%m.%Y %H:%M')
-        list_of_dfs[i] = list_of_dfs[i].rename(columns={'Tid(norsk normaltid)':'ts_all_1h', label_to_read:'temperature_'+str(i+1)}).set_index('ts_all_1h').drop(['Navn','Stasjon'], axis=1)
-        list_of_dfs[i]['temperature_'+str(i+1)] = pd.to_numeric(list_of_dfs[i]['temperature_'+str(i+1)].str.replace(',','.'))
-    ts_min = min([min(list_of_dfs[i].index) for i in range(n_files)])
-    ts_max = max([max(list_of_dfs[i].index) for i in range(n_files)])
-    ts_all_1h = pd.date_range(ts_min, ts_max, freq='h')
-    list_of_all_dfs = [pd.DataFrame({'ts_all_1h':ts_all_1h}).set_index('ts_all_1h')] + list_of_dfs
-    final_df = pd.DataFrame().join(list_of_all_dfs, how="outer")
-    final_df['temperature_final'] = final_df.mean(axis=1, skipna=True).rolling(smooth_str).mean()
-    return final_df
-
-
-def get_max_num_consec_NaN(df):
-    return max(df.isnull().astype(int).groupby(df.notnull().astype(int).cumsum()).cumsum())
-
-
-# Getting the transition zones as described in NS-EN 1991-1-4:2005/NA:2009, NA.4.3.2(2)
 def get_one_roughness_transition_zone(dists, heights):
     """
+    Getting the transition zones as described in NS-EN 1991-1-4:2005/NA:2009, NA.4.3.2(2)
     When using the Eurocode to predict turbulence, two zones with different terrain roughnessess can be chosen. The transition zone is the upstream distance that divides these two categories.
     My own classification algorithm is smple: Try each distance and choose the one with less misclassifications (ground vs sea) (ascending vs descending roughness with the wind)
     """
@@ -303,24 +250,22 @@ def get_one_roughness_transition_zone(dists, heights):
 
 def get_all_roughness_transition_zones(step_distance=False, total_distance=False, list_of_distances=[i*(5.+5.*i) for i in range(45)]):
     transition_zones = {}
-    for anem, anem_coor in anem_EN_33.items():
-        transition_zones[anem] = []
+    for pt, pt_coor in all_pts_EN_33.items():
+        transition_zones[pt] = []
         for d in list(range(360)):
-            dists, heights = example_of_elevation_profile_at_given_point_dir_dist(point_1=anem_coor, direction_deg=d, step_distance=step_distance, total_distance=total_distance, list_of_distances=list_of_distances, plot=False)
-            transition_zones[anem].append(get_one_roughness_transition_zone(dists, heights))
+            dists, heights = example_of_elevation_profile_at_given_point_dir_dist(point_1=pt_coor, direction_deg=d, step_distance=step_distance, total_distance=total_distance, list_of_distances=list_of_distances, plot=False)
+            transition_zones[pt].append(get_one_roughness_transition_zone(dists, heights))
     return transition_zones
 
 
 def plot_roughness_transitions_per_anem(list_of_degs = list(range(360)), step_distance=False, total_distance=False, list_of_distances=[i*(5.+5.*i) for i in range(45)]):
     transition_zones = get_all_roughness_transition_zones()
-    from orography import synn_EN_33, svar_EN_33, osp1_EN_33, osp2_EN_33, land_EN_33, neso_EN_33
-    anem_EN_33 = {'synn':synn_EN_33, 'svar':svar_EN_33, 'osp1':osp1_EN_33, 'osp2':osp2_EN_33, 'land':land_EN_33, 'neso':neso_EN_33}
-    for anem, anem_coor in anem_EN_33.items():
+    for pt, pt_coor in all_pts_EN_33.items():
         dists_all_dirs = []
         roughs_all_dirs = []
         degs = []
         for d in list_of_degs:
-            dists, heights = example_of_elevation_profile_at_given_point_dir_dist(point_1=anem_coor, direction_deg=d, step_distance=step_distance, total_distance=total_distance, list_of_distances=list_of_distances, plot=False)
+            dists, heights = example_of_elevation_profile_at_given_point_dir_dist(point_1=pt_coor, direction_deg=d, step_distance=step_distance, total_distance=total_distance, list_of_distances=list_of_distances, plot=False)
             roughs = heights.astype(bool).astype(float)
             dists_all_dirs.append(dists)
             roughs_all_dirs.append(roughs)
@@ -330,13 +275,13 @@ def plot_roughness_transitions_per_anem(list_of_degs = list(range(360)), step_di
         roughs_all_dirs = np.array(roughs_all_dirs)
         fig, ax = plt.subplots(figsize=(5.5,2.3+0.5), dpi=400)
         ax.pcolormesh(degs, dists_all_dirs[0], roughs_all_dirs.T, cmap=matplotlib.colors.ListedColormap(['skyblue', 'navajowhite']), shading='auto') #, vmin = 0., vmax = 1.)
-        xB = np.array([item[1] for item in transition_zones[anem]])
-        asc_desc = np.array([item[2] for item in transition_zones[anem]])
+        xB = np.array([item[1] for item in transition_zones[pt]])
+        asc_desc = np.array([item[2] for item in transition_zones[pt]])
         asc_idxs = np.where(asc_desc=='ascending')
         des_idxs = np.where(asc_desc=='descending')
         ax.scatter(degs[asc_idxs], xB[asc_idxs], s=1, alpha=0.4, color='red', label='ascending')
         ax.scatter(degs[des_idxs], xB[des_idxs], s=1, alpha=0.4, color='green', label='descending')
-        ax.set_title(nice_str_dict[anem+'_A']+': '+'Upstream topography;')
+        ax.set_title(bj_pts_nice_str[pt]+': '+'Upstream topography;')
         ax.patch.set_color('skyblue')
         ax.set_xticks([0, 45, 90, 135, 180, 225, 270, 315, 360])
         ax.set_xticklabels(['0(N)', '45', '90(E)', '135', '180(S)', '225', '270(W)', '315', '360'])
@@ -369,7 +314,7 @@ def get_all_Iu_with_eurocode():
     c_alt = 1.0  # 1.0 because H < H0, where H0 is 900m for Rogaland
     c_prob = 1.0
     Iu = {}
-    for pt in bj_pts_EN_33.keys():
+    for pt in all_pts_EN_33.keys():
         Iu[pt] = []
         xB_all_dirs = [item[1] for item in transition_zones[pt]]
         asc_desc = [item[2] for item in transition_zones[pt]]
@@ -413,9 +358,8 @@ def get_all_Iu_with_eurocode():
             numerator = IuA * vmA * (1-xB/10) + IuB * vmB * xB/10
             Iu[pt].append(numerator / denominator)
     return Iu
-
-
 Iu_EN = get_all_Iu_with_eurocode()
+
 
 def generate_new_data(U_min):
     ##################################################################
@@ -431,12 +375,9 @@ def generate_new_data(U_min):
     return None
 
 
-def predict_mean_turbulence_with_ML(n_trials):
-    # Do the same as before, but using only topographic data, and mean Iu! The total number of samples will be greatly reduced, to only 360*6!
-    result_name_tag = 'A'  # add this to the plot names and hp_opt text file
+def predict_mean_turbulence_with_ML_at_BJ(n_trials):
     U_min = 5
     dir_sector_amp = 1
-
     # Loading data already saved
     data_path = os.path.join(os.getcwd(), 'processed_data_for_ML', f'X_y_ML_ready_data_Umin_{U_min}_masts_6_new_dirs_w_ts')
     loaded_data = np.load(data_path + '.npz')
@@ -444,6 +385,7 @@ def predict_mean_turbulence_with_ML(n_trials):
     X_data_nonnorm =          loaded_data['X']
     y_data_nonnorm =          loaded_data['y']
     all_anem_list =           loaded_data['m']
+    all_pts_list = list(all_anem_list) + list(bj_pts_EN_33.keys())
     start_idxs_of_each_anem = loaded_data['i']
     X_ts =                    loaded_data['t']
     print(f'Number of features {X_data_nonnorm.shape[1]}: U(1)+Dir(1)+WindwardHeightsMiddleCone(45)+MeanWindWard(44)+STDWindWard(44)+MeanLeeWard(10)+STDLeeWard(9)+MeanSideWard(10)+STDSideWard(9)')
@@ -455,37 +397,54 @@ def predict_mean_turbulence_with_ML(n_trials):
     def get_sect_mean_data():  # get Sectoral mean data
         df_sect_means = {}
         df_mins_maxs = pd.DataFrame()
-        for anem_idx, anem in enumerate(all_anem_list):
-            anem_slice = slice(idxs_of_each_anem[anem_idx], idxs_of_each_anem[anem_idx+1])
-            X_U = X_data_nonnorm[anem_slice, 0]
-            X_dirs = X_data_nonnorm[anem_slice, 1]
-            X_sectors = np.searchsorted(dir_sectors, X_dirs, side='right') - 1  # groups all the measured directions into sectors
-            Z_vectors = X_data_nonnorm[anem_slice,2:2+45]
-            R_vectors = np.array(np.array(Z_vectors, dtype=bool), dtype=float)
-            y_std_u =  y_data_nonnorm[anem_slice]
-            y_Iu = y_std_u / X_U
-            df_Sectors = pd.DataFrame({'X_sectors':X_sectors})
-            df_U = pd.DataFrame({'U':X_U})
-            df_Z = pd.DataFrame(Z_vectors).add_prefix('Z')
-            df_R = pd.DataFrame(R_vectors).add_prefix('R')
-            df_std_u = pd.DataFrame({'std_u':y_std_u})
-            df_Iu = pd.DataFrame({'Iu':y_Iu})
-            df_data_1_anem = pd.concat([df_Sectors, df_U, df_Z, df_R, df_std_u, df_Iu], axis=1)
-            df_n_samples_per_sector = df_data_1_anem.groupby('X_sectors').size().reset_index(name='n_samples')  # sectors with 0 samples will vanish here!
-            sectors_with_data = df_n_samples_per_sector['X_sectors'].to_numpy()
-            sectors_with_no_data = [x for x in dir_sectors if x not in sectors_with_data]
-            df_n_samples_per_sector = df_n_samples_per_sector.append(pd.DataFrame({'X_sectors':sectors_with_no_data, 'n_samples':np.zeros(len(sectors_with_no_data))})).sort_values(by=['X_sectors']).reset_index(drop=True)  # Manually inserting the sectors without data that vanished previously
-            df_sect_means_1_anem = pd.concat([df_n_samples_per_sector, df_data_1_anem.groupby('X_sectors').mean()], axis=1)
-            # Changing mean values to nan where number of samples is less than a threshold:
-            n_samples_threshold = 3
-            columns_to_convert_to_nan = [c for c in df_sect_means_1_anem.columns if c not in ['X_sectors','n_samples']]
-            df_sect_means_1_anem.loc[df_sect_means_1_anem['n_samples'] < n_samples_threshold, columns_to_convert_to_nan] = np.nan
-            df_mins_maxs_1_anem = df_sect_means_1_anem.agg([min, max])
-            df_sect_means[anem] = df_sect_means_1_anem
-            df_mins_maxs = df_mins_maxs.append(df_mins_maxs_1_anem)
+        for pt_idx, pt in enumerate(all_pts_list):
+            if 'bj' not in pt:
+                anem_slice = slice(idxs_of_each_anem[pt_idx], idxs_of_each_anem[pt_idx+1])
+                X_U = X_data_nonnorm[anem_slice, 0]
+                X_dirs = X_data_nonnorm[anem_slice, 1]
+                X_sectors = np.searchsorted(dir_sectors, X_dirs, side='right') - 1  # groups all the measured directions into sectors
+                Z_vectors = X_data_nonnorm[anem_slice,2:2+45]
+                R_vectors = np.array(np.array(Z_vectors, dtype=bool), dtype=float)
+                y_std_u =  y_data_nonnorm[anem_slice]
+                y_Iu = y_std_u / X_U
+                df_Sectors = pd.DataFrame({'X_sectors': X_sectors})
+                df_U = pd.DataFrame({'U': X_U})
+                df_Z = pd.DataFrame(Z_vectors).add_prefix('Z')
+                df_R = pd.DataFrame(R_vectors).add_prefix('R')
+                df_std_u = pd.DataFrame({'std_u': y_std_u})
+                df_Iu = pd.DataFrame({'Iu': y_Iu})
+                df_data_1_anem = pd.concat([df_Sectors, df_U, df_Z, df_R, df_std_u, df_Iu], axis=1)
+                df_n_samples_per_sector = df_data_1_anem.groupby('X_sectors').size().reset_index(name='n_samples')  # sectors with 0 samples will vanish here!
+                sectors_with_data = df_n_samples_per_sector['X_sectors'].to_numpy()
+                sectors_with_no_data = [x for x in dir_sectors if x not in sectors_with_data]
+                df_n_samples_per_sector = df_n_samples_per_sector.append(pd.DataFrame({'X_sectors':sectors_with_no_data, 'n_samples':np.zeros(len(sectors_with_no_data))})).sort_values(by=['X_sectors']).reset_index(drop=True)  # Manually inserting the sectors without data that vanished previously
+                df_sect_means_1_anem = pd.concat([df_n_samples_per_sector, df_data_1_anem.groupby('X_sectors').mean()], axis=1)
+                # Changing mean values to nan where number of samples is less than a threshold:
+                n_samples_threshold = 3
+                columns_to_convert_to_nan = [c for c in df_sect_means_1_anem.columns if c not in ['X_sectors','n_samples']]
+                df_sect_means_1_anem.loc[df_sect_means_1_anem['n_samples'] < n_samples_threshold, columns_to_convert_to_nan] = np.nan
+                df_mins_maxs_1_anem = df_sect_means_1_anem.agg([min, max])
+                df_sect_means[pt] = df_sect_means_1_anem
+                df_mins_maxs = df_mins_maxs.append(df_mins_maxs_1_anem)
+            elif 'bj' in pt:
+                X_U = np.zeros(len(dir_sectors)) * np.nan
+                X_sectors = dir_sectors
+                Z_vectors = get_heights_from_X_dirs_and_dists(all_pts_EN_33[pt], dir_sectors, [0], [i * (5. + 5. * i) for i in range(45)])[0]
+                R_vectors = np.array(np.array(Z_vectors, dtype=bool), dtype=float)
+                y_std_u = np.zeros(len(dir_sectors)) * np.nan
+                y_Iu = Iu_EN[pt]
+                df_Sectors = pd.DataFrame({'X_sectors':X_sectors})
+                df_U = pd.DataFrame({'U':X_U})
+                df_Z = pd.DataFrame(Z_vectors).add_prefix('Z')
+                df_R = pd.DataFrame(R_vectors).add_prefix('R')
+                df_std_u = pd.DataFrame({'std_u':y_std_u})
+                df_Iu = pd.DataFrame({'Iu':y_Iu})
+                df_sect_means_1_anem = pd.concat([df_Sectors, df_U, df_Z, df_R, df_std_u, df_Iu], axis=1)
+                df_mins_maxs_1_anem = df_sect_means_1_anem.agg([min, max])
+                df_sect_means[pt] = df_sect_means_1_anem
+                df_mins_maxs = df_mins_maxs.append(df_mins_maxs_1_anem)
         df_mins_maxs = df_mins_maxs.agg([min, max])  # Needed to normalize data by mins and maxs of all anems!
         return df_sect_means, df_mins_maxs
-
     df_sect_means, df_mins_maxs = get_sect_mean_data()
     df_mins_maxs.to_csv('df_mins_maxs.csv')
 
@@ -519,17 +478,6 @@ def predict_mean_turbulence_with_ML(n_trials):
         X_test  = pd.concat([pd.DataFrame(X_all[anem]) for anem in  anem_to_test]).to_numpy()
         y_train = pd.concat([pd.DataFrame(y_all[anem]) for anem in anem_to_train]).to_numpy()
         y_test  = pd.concat([pd.DataFrame(y_all[anem]) for anem in  anem_to_test]).to_numpy()
-        ### OLD TRASH
-        # X_train = np.array([X_all[anem] for anem in anem_to_train])  # shape:(anems, sectors, features)
-        # X_test =  np.array([X_all[anem] for anem in anem_to_test])   # shape:(anems, sectors, features)
-        # y_train = np.array([y_all[anem] for anem in anem_to_train])  # shape:(anems, sectors)
-        # y_test =  np.array([y_all[anem] for anem in anem_to_test])   # shape:(anems, sectors)
-        # # Flattening the two anems and sectors dimensions into one.
-        # X_train = X_train.reshape(X_train.shape[0] * X_train.shape[1], X_train.shape[2])  # shape:(anems * sectors, features)
-        # X_test  =  X_test.reshape( X_test.shape[0] *  X_test.shape[1],  X_test.shape[2])  # shape:(anems * sectors, features)
-        # y_train = y_train.reshape(y_train.shape[0] * y_train.shape[1])                    # shape:(anems * sectors)
-        # y_test  =  y_test.reshape( y_test.shape[0] *  y_test.shape[1])                    # shape:(anems * sectors)
-        ### OLD TRASH
         # Converting to Tensor (GPU-accelerated)
         X_train = Tensor(X_train).to(device)
         X_test  = Tensor(X_test ).to(device)
@@ -563,7 +511,6 @@ def predict_mean_turbulence_with_ML(n_trials):
     def train_and_test_NN(X_train, y_train, X_test, y_test, hp, print_loss_per_epoch=True, print_results=True):
         """
         Args:
-            R2_of:
             X_train:
             y_train:
             X_test:
@@ -620,7 +567,7 @@ def predict_mean_turbulence_with_ML(n_trials):
         # Testing
         n_samples_test = X_test.shape[0]
         with torch.no_grad():
-            y_pred = my_nn(Variable(X_test))
+            y_pred = my_nn(Variable(X_test))   # todo: adapt X_test to allow for multiple test points! (previously anem_test was just a len==1 list)
             y_test_total_mean = torch.mean(y_test.view(n_samples_test, n_outputs), axis=0)
             SS_res_test = torch.sum((y_test.view(n_samples_test, n_outputs) - y_pred.view(n_samples_test, n_outputs)) ** 2)
             SS_tot_test = torch.sum((y_test.view(n_samples_test, n_outputs) - y_test_total_mean) ** 2)
@@ -683,19 +630,10 @@ def predict_mean_turbulence_with_ML(n_trials):
             hp_opt_results.append(hp_opt_result)
         return hp_opt_results
 
-    my_NN_cases = [{'anem_to_train': ['osp1_A', 'osp2_A', 'synn_A', 'svar_A', 'neso_A'],
-                    'anem_to_test': ['land_A']},
-                   {'anem_to_train': ['osp1_A', 'osp2_A', 'synn_A', 'svar_A', 'land_A'],
-                    'anem_to_test': ['neso_A']},
-                   {'anem_to_train': ['osp2_A', 'synn_A', 'svar_A', 'land_A', 'neso_A'],
-                    'anem_to_test': ['osp1_A']},
-                   {'anem_to_train': ['synn_A', 'svar_A', 'land_A', 'neso_A'],
-                    'anem_to_test': ['osp2_A']},
-                   {'anem_to_train': ['osp1_A', 'osp2_A', 'svar_A', 'land_A', 'neso_A'],
-                    'anem_to_test': ['synn_A']},
-                   {'anem_to_train': ['osp1_A', 'osp2_A', 'synn_A', 'land_A', 'neso_A'],
-                    'anem_to_test': ['svar_A']}
-                   ]
+    # my_NN_cases = [{'anem_to_train': ['osp1_A', 'osp2_A', 'synn_A', 'svar_A', 'land_A', 'neso_A'],
+    #                 'anem_to_test': ['bj01','bj02','bj03','bj04','bj05','bj06','bj07','bj08','bj09','bj10','bj11']}]
+    my_NN_cases = [{'anem_to_train': ['osp1_A', 'osp2_A', 'synn_A', 'svar_A', 'land_A'],
+                    'anem_to_test': ['neso_A']}]
 
     these_hp_opt = find_optimal_hp_for_each_of_my_cases(my_NN_cases, df_sect_means, df_mins_maxs, n_trials=n_trials)
 
@@ -704,7 +642,7 @@ def predict_mean_turbulence_with_ML(n_trials):
         my_NN_case = my_NN_cases[case_idx]
         anem_to_test = my_NN_case['anem_to_test']
         try:
-            with open(f'hp_opt.txt', 'r') as prev_file:
+            with open(f'hp_opt_BJ.txt', 'r') as prev_file:
                 prev_hp_opt_results = eval(json.load(prev_file))
             tested_results = np.array([[tested_idx, *i['anem_to_test']] for tested_idx, i in enumerate(prev_hp_opt_results)])
             tested_results_idx = np.where(tested_results[:, 1] == anem_to_test)[0]
@@ -713,16 +651,15 @@ def predict_mean_turbulence_with_ML(n_trials):
                     these_hp_opt[case_idx] = prev_hp_opt_results[tested_results_idx[0]]
         except FileNotFoundError:
             print(anem_to_test)
-            print('No file with name: ' + f'hp_opt.txt !!')
+            print('No file with name: ' + f'hp_opt_BJ.txt !!')
     hp_opt = copy.deepcopy(these_hp_opt)
-    with open(f'hp_opt.txt', 'w') as file:
+    with open(f'hp_opt_BJ.txt', 'w') as file:
         file.write(json.dumps(str(hp_opt)))
 
     for case_idx in range(len(my_NN_cases)):
         my_NN_case = my_NN_cases[case_idx]
         anem_to_train = my_NN_case['anem_to_train']
         anem_to_test = my_NN_case['anem_to_test']
-
         hp = copy.deepcopy(hp_opt[case_idx]['best_params'])
         if type(hp['activation']) == str:
             hp['activation'] = activation_fun_dict[hp['activation']]
@@ -741,8 +678,8 @@ def predict_mean_turbulence_with_ML(n_trials):
         Iu_EN_at_sectors_w_data = Iu_EN_anem[sectors_test]
         R2_with_EN = np.round(r2_score(y_test_nonnorm, Iu_EN_at_sectors_w_data), 3)
         fig, ax1 = plt.subplots(figsize=(5.5*0.93, 2.5*0.93), dpi=400/0.93)
-        # plt.title(nice_str_dict[my_NN_cases[case_idx]['anem_to_test'][0]] + '.  $R^2='+ str(np.round(R2_of_means, 2))+'$')
-        ax1.set_title(f"Sectoral averages of $I_u$ at {nice_str_dict[my_NN_cases[case_idx]['anem_to_test'][0]]}")
+        # plt.title(all_pts_nice_str[my_NN_cases[case_idx]['anem_to_test'][0]] + '.  $R^2='+ str(np.round(R2_of_means, 2))+'$')
+        ax1.set_title(f"Sectoral averages of $I_u$ at {bj_pts_nice_str[my_NN_cases[case_idx]['anem_to_test'][0]]}")
         # plt.scatter(X_test_dirs_nonnorm, y_test_nonnorm, s=0.01, alpha=0.2, c='black') #, label='Measured')
         ax1.scatter(sectors_test, y_test_nonnorm, s=12, alpha=0.6, c='black', zorder=0.98, edgecolors='none', marker='s', label='Measurements')
         ax1.scatter(sectors_test, y_pred_nonnorm, s=12, alpha=0.6, c='darkorange', zorder=1.0, edgecolors='none', marker='o', label='ANN predictions')
@@ -762,7 +699,7 @@ def predict_mean_turbulence_with_ML(n_trials):
         ax1.set_ylim([0, 0.63])
         ax2.set_ylim([0, 20])
         fig.tight_layout(pad=0.05)
-        plt.savefig(os.path.join(os.getcwd(), 'plots', f'{result_name_tag}_Iu_Case_{case_idx}_{anem_to_test[0]}_Umin_{U_min}_Sector-{dir_sector_amp}_ANNR2_{R2_ANN}_ENR2_{R2_with_EN}.png'))
+        plt.savefig(os.path.join(os.getcwd(), 'plots', f'Bjorna_Iu_Case_{case_idx}_{anem_to_test[0]}_Umin_{U_min}_Sector-{dir_sector_amp}_ANNR2_{R2_ANN}_ENR2_{R2_with_EN}.png'))
         # plt.show()
     return None
 
