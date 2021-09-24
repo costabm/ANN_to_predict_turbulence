@@ -684,14 +684,22 @@ def predict_mean_turbulence_with_ML_at_BJ(n_hp_trials,  name_prefix, make_plots=
         if type(hp['loss']) == str:
             hp['loss'] = loss_fun_dict[hp['loss']]
         X_train, y_train, X_test, y_test, batch_size, sectors_train, sectors_test, U_test = get_X_y_train_and_test_and_batch_size_from_anems(anem_to_train, anem_to_test, df_sect_means, df_mins_maxs)
+        idxs_sectors_test = np.array([i for i, item in enumerate(dir_sectors) if item in sectors_test])
         hp['batch_size'] = batch_size
         y_pred, R2 = train_and_test_NN(X_train, y_train, X_test, y_test, hp=hp, print_loss_per_epoch=False, print_results=False)
         y_test_nonnorm = np.ndarray.flatten(y_test.cpu().numpy()) * (df_mins_maxs['Iu'].loc['max'] - df_mins_maxs['Iu'].loc['min']) + df_mins_maxs['Iu'].loc['min']
         y_pred_nonnorm = np.ndarray.flatten(y_pred.cpu().numpy()) * (df_mins_maxs['Iu'].loc['max'] - df_mins_maxs['Iu'].loc['min']) + df_mins_maxs['Iu'].loc['min']
-        accuracy = 100 - 100 * np.mean(np.abs(y_pred_nonnorm - y_test_nonnorm) / y_test_nonnorm)
-        print(f'Testing: {anem_to_test}... R2: {np.round(R2,4)}. Accuracy: {np.round(accuracy,4)}')
-        these_hp_opt[case_idx]['final_R2_test_value'] = float(R2)
-        these_hp_opt[case_idx]['final_accuracy'] = float(accuracy)
+        if 'bj' in anem_to_test:
+            Iu_EN_anem = np.array(Iu_EN[anem_to_test[0]])
+        else:
+            Iu_EN_anem = np.array(Iu_EN[anem_to_test[0][:-2]])[idxs_sectors_test]
+        accuracy_ANN = 100 - 100 * np.mean(np.abs(y_pred_nonnorm - y_test_nonnorm) / y_test_nonnorm)
+        accuracy_EC  = 100 - 100 * np.mean(np.abs(    Iu_EN_anem - y_test_nonnorm) / y_test_nonnorm)
+        print(f'Testing: {anem_to_test[0]}... R2: {np.round(R2,4)}. Accuracy: {np.round(accuracy_ANN,4)}')
+        these_hp_opt[case_idx]['final_ANN_R2_test_value'] = float(R2)
+        these_hp_opt[case_idx]['final_ANN_accuracy'] = float(accuracy_ANN)
+        these_hp_opt[case_idx]['final_EC_R2_test_value'] = float(r2_score(y_test_nonnorm, Iu_EN_anem))
+        these_hp_opt[case_idx]['final_EC_accuracy'] =  float(accuracy_EC)
 
         # PLOT MEANS OF PREDICTIONS
         if make_plots:  # these plots are suitable for the predictions at the middle of Bjørnafjord, where there are no measurements
@@ -703,19 +711,16 @@ def predict_mean_turbulence_with_ML_at_BJ(n_hp_trials,  name_prefix, make_plots=
                     sectors_test_1_pt = sectors_test_by_pt[idx_pt_to_test]
                     lens_by_pt = [len(sectors_test_by_pt[i]) for i in range(0,idx_pt_to_test+1)]  # n_sectors for each point. e.g: [360,360,317,302,360,...]
                     start_idxs_of_each_pt = np.cumsum([0] + lens_by_pt)
-                    pt_slice = slice(start_idxs_of_each_pt[idx_pt_to_test], start_idxs_of_each_pt[idx_pt_to_test+1])
+                    pt_slice = slice(start_idxs_of_each_pt[idx_pt_to_test], start_idxs_of_each_pt[idx_pt_to_test+1])  # only meant when sectors_test includes several tested anems??
                     R2_ANN = str(np.round(R2, 3))
                     fig, ax1 = plt.subplots(figsize=(5.5*0.93, 2.5*0.93), dpi=400/0.93)
                     ax1.set_title(f"Sectoral averages of $I_u$ at {all_pts_nice_str[my_cases[case_idx]['anem_to_test'][idx_pt_to_test]]}")
                     ax1.scatter(sectors_test[pt_slice], y_pred_nonnorm[pt_slice], s=12, alpha=0.6, c='darkorange', zorder=1.0, edgecolors='none', marker='o', label='ANN predictions')
                     if 'bj' in pt_to_test:
-                        Iu_EN_anem = np.array(Iu_EN[pt_to_test])
                         ax1.scatter(sectors_test[pt_slice], Iu_EN_anem, s=12, alpha=0.6, c='green', zorder=0.99, edgecolors='none', marker='^', label='NS-EN 1991-1-4')
                         ax1.legend(markerscale=2., loc=1, handletextpad=0.1)
                     else:
-                        Iu_EN_anem = np.array(Iu_EN[pt_to_test[:-2]])
-                        idxs_to_plot = np.array([i for i in sectors_test[pt_slice] if i in dir_sectors])
-                        ax1.scatter(sectors_test[pt_slice], Iu_EN_anem[idxs_to_plot], s=12, alpha=0.6, c='green', zorder=0.99, edgecolors='none', marker='^', label='NS-EN 1991-1-4')
+                        ax1.scatter(sectors_test[pt_slice], Iu_EN_anem, s=12, alpha=0.6, c='green', zorder=0.99, edgecolors='none', marker='^', label='NS-EN 1991-1-4')
                         measur_anem = np.array(y_test_nonnorm[pt_slice])
                         ax1.scatter(sectors_test[pt_slice], measur_anem, s=12, alpha=0.6, c='black', zorder=0.98, edgecolors='none', marker='s', label='Measurements')
                         ax2 = ax1.twinx()
@@ -739,11 +744,69 @@ def predict_mean_turbulence_with_ML_at_BJ(n_hp_trials,  name_prefix, make_plots=
 
     return None
 
-for i in range(10):
-    predict_mean_turbulence_with_ML_at_BJ(n_hp_trials=2, name_prefix=str(i), make_plots=True)
+for i in range(10,20):
+    predict_mean_turbulence_with_ML_at_BJ(n_hp_trials=1, name_prefix=str(i), make_plots=True)
 
 
+def plot_R2_and_accuracies(n_final_tests_per_anem=20):
+    import seaborn as sns
 
-predict_mean_turbulence_with_ML_at_BJ(n_hp_trials=1, name_prefix='TestPlots', make_plots=True)
+    results = {}  # shape: ('n_final_tests', n_anems_tested, 'features'), where '' represents dictionary
+    for name_prefix in range(n_final_tests_per_anem):
+        with open(f'{name_prefix}_hp_opt_cross_val.txt', 'r') as file:
+            results[str(name_prefix)] = eval(json.load(file))
 
+    df_results_R2 = pd.DataFrame()
+    df_results_acc = pd.DataFrame()
+    for t in range(n_final_tests_per_anem):
+        for a in range(6):
+            anem_to_test = results[str(t)][a][   'anem_to_test'][0]
+            df_results_R2 = df_results_R2.append({'anem'        :anem_nice_str[anem_to_test],
+                                                  'ANN'      :results[str(t)][a]['final_ANN_R2_test_value'],
+                                                  'NS-EN 1991-1-4'       :results[str(t)][a]['final_EC_R2_test_value'],
+                                                  }, ignore_index=True)
+            df_results_acc=df_results_acc.append({'anem': anem_nice_str[anem_to_test],
+                                                  'ANN': results[str(t)][a]['final_ANN_accuracy'],
+                                                  'NS-EN 1991-1-4': results[str(t)][a]['final_EC_accuracy']
+                                                  }, ignore_index=True)
+    # df_results_R2_melted =  pd.melt( df_results_R2, id_vars="anem", var_name="Method", value_name="values").dropna()
+    # df_results_acc_melted = pd.melt(df_results_acc, id_vars="anem", var_name="Method", value_name="values").dropna()
 
+    import matplotlib.patches as mpatches
+
+    ANN_patch = mpatches.Patch(color='darkorange', alpha=0.6, label='ANN predictions')
+    EC_patch = mpatches.Patch(color='green', alpha=0.6, label='NS-EN 1991-1-4')
+
+    # R2 Plot
+    fig, axes = plt.subplots(sharex=True, sharey=True) #, figsize=(8,3))
+    sns.set(style="whitegrid")
+    sns.barplot(x="anem", y="ANN", data=df_results_R2, ci=0, capsize=0.8, errwidth=3, zorder=0.99, alpha=0.6, facecolor=(1, 1, 1, 0.5), errcolor='green')
+    sns.violinplot(x="anem", y="ANN", data=df_results_R2, inner=None, label='ANN', color='darkorange', alpha=0.6, bw=0.2, scale='width', linewidth=0.1)
+    # # sns.boxplot(x='anem', y='values', hue='Method', data=df_results_R2_melted)
+    # sns.catplot(x='anem', y='values', hue='Method', data=df_results_R2_melted, kind='violin', inner=None, alpha=0.5)
+    sns.swarmplot(x="anem", y="ANN", data=df_results_R2, color="saddlebrown", alpha=.9)
+    plt.xticks(rotation=30)
+    plt.xlabel('')
+    plt.ylabel('$R^2$')
+    plt.legend(handles=[ANN_patch, EC_patch])
+    plt.tight_layout()
+    plt.show()
+
+    # Accuracy Plot
+    fig, axes = plt.subplots(sharex=True, sharey=True) #, figsize=(8,3))
+    sns.set(style="whitegrid")
+    sns.barplot(x="anem", y="ANN", data=df_results_acc, ci=0, capsize=0.8, errwidth=3, zorder=0.99, alpha=0.6, facecolor=(1, 1, 1, 0.5), errcolor='green')
+    sns.violinplot(x="anem", y="ANN", data=df_results_acc, inner=None, label='ANN', color='darkorange', alpha=0.6, bw=0.2, scale='width', linewidth=0.1)
+    # # sns.boxplot(x='anem', y='values', hue='Method', data=df_results_R2_melted)
+    # sns.catplot(x='anem', y='values', hue='Method', data=df_results_R2_melted, kind='violin', inner=None, alpha=0.5)
+    sns.swarmplot(x="anem", y="ANN", data=df_results_acc, color="saddlebrown", alpha=.9)
+    plt.xticks(rotation=30)
+    plt.xlabel('')
+    plt.ylabel('Accuracy [%]')
+    plt.legend(handles=[ANN_patch, EC_patch])
+    plt.tight_layout()
+    plt.show()
+
+    pass
+
+plot_R2_and_accuracies(n_final_tests_per_anem=20)
