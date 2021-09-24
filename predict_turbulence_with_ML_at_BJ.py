@@ -375,7 +375,7 @@ def generate_new_data(U_min):
     return None
 
 
-def predict_mean_turbulence_with_ML_at_BJ(n_trials):
+def predict_mean_turbulence_with_ML_at_BJ(n_hp_trials,  name_prefix, make_plots=True):
     U_min = 5
     dir_sector_amp = 1
     # Loading data already saved
@@ -393,6 +393,9 @@ def predict_mean_turbulence_with_ML_at_BJ(n_trials):
     dir_sectors = np.arange(0, 360, dir_sector_amp)
     n_sectors = len(dir_sectors)
     idxs_of_each_anem = np.append(start_idxs_of_each_anem, n_samples)
+
+    def split_list_into_strictly_ascending_sublists(lst):
+        return np.split(lst, np.where(np.diff(lst) < 0)[0] + 1)
 
     def get_sect_mean_data():  # get Sectoral mean data
         df_sect_means = {}
@@ -448,15 +451,18 @@ def predict_mean_turbulence_with_ML_at_BJ(n_trials):
     df_sect_means, df_mins_maxs = get_sect_mean_data()
     df_mins_maxs.to_csv('df_mins_maxs.csv')
 
-    def get_X_y_train_and_test_and_batch_size_from_anems(anem_to_train, anem_to_test, df_sect_means, df_mins_maxs, inputs_initials=['Z','R'], output='Iu', batch_size_desired=360, batch_size_lims=[30, 30000], remove_nan_data=True):
+    def get_X_y_train_and_test_and_batch_size_from_anems(anem_to_train, anem_to_test, df_sect_means, df_mins_maxs, inputs_initials=['Z','R'], output='Iu', batch_size_desired='full', batch_size_lims=[30, 30000], remove_nan_data=True):
         """
         Returns: Input (X) and output (y) data, for training and testing, from given lists of anemometers to be used in the training and testing. Batch size
         """
+        if isinstance(anem_to_test, str):
+            anem_to_test = [anem_to_test]  # if it is str e.g. 'osp1_A' then convert to ['osp1_A']
         df_mins_maxs = copy.deepcopy(df_mins_maxs)  # mins and maxs from all anems (both training and testing)
         df_sect_means = copy.deepcopy(df_sect_means)
         if remove_nan_data:
             for anem in anem_to_train + anem_to_test:
-                df_sect_means[anem] = df_sect_means[anem].dropna(axis=0, how='any').reset_index(drop=True)
+                if 'bj' not in anem:  # bj points have nans that we don't want to remove
+                    df_sect_means[anem] = df_sect_means[anem].dropna(axis=0, how='any').reset_index(drop=True)
         # Transforming ['Z','R','Iu'] into ['Z0','Z1','Z2',...,'R0','R1','R2',...,'Iu']:
         inputs_all = []  # names of all keys of the df_sect_means to be used in the X and y data
         for col_name in list(df_mins_maxs.columns):
@@ -485,26 +491,29 @@ def predict_mean_turbulence_with_ML_at_BJ(n_trials):
         y_test  = Tensor( y_test).to(device).view( y_test.shape[0], 1)
         # Getting batch size (which can change the X and y data, by trimming a few data points!)
         n_samples_train = X_train.shape[0]
-        batch_size_possibilities = np.array(sympy.divisors(n_samples_train))  # [1, 2, 4, 23, 46, 92, 4051, 8102, 16204, 93173, 186346, 372692]
-        batch_size = min(batch_size_possibilities, key=lambda x: abs(x - batch_size_desired))
-        batch_cond = batch_size_lims[0] < batch_size < batch_size_lims[1]
-        time_start = datetime.datetime.now()
-        while not batch_cond:
-            time_elapsed = datetime.datetime.now() - time_start
-            if time_elapsed.seconds > 5:
-                raise TimeoutError
-            # Removing 1 data point to assess new possibilities for the batch size (integer divisor of data size)
-            X_train = X_train[:-1, :]
-            y_train = y_train[:-1, :]
-            X_test = X_test[:-1, :]
-            y_test = y_test[:-1, :]
-            sectors_train = sectors_train[:-1]
-            sectors_test = sectors_test[:-1]
-            U_test = U_test[:-1]
-            n_samples_train = X_train.shape[0]
+        if batch_size_desired == 'full':
+            batch_size = n_samples_train
+        else:
             batch_size_possibilities = np.array(sympy.divisors(n_samples_train))  # [1, 2, 4, 23, 46, 92, 4051, 8102, 16204, 93173, 186346, 372692]
             batch_size = min(batch_size_possibilities, key=lambda x: abs(x - batch_size_desired))
             batch_cond = batch_size_lims[0] < batch_size < batch_size_lims[1]
+            time_start = datetime.datetime.now()
+            while not batch_cond:
+                time_elapsed = datetime.datetime.now() - time_start
+                if time_elapsed.seconds > 5:
+                    raise TimeoutError
+                # Removing 1 data point to assess new possibilities for the batch size (integer divisor of data size)
+                X_train = X_train[:-1, :]
+                y_train = y_train[:-1, :]
+                X_test = X_test[:-1, :]
+                y_test = y_test[:-1, :]
+                sectors_train = sectors_train[:-1]
+                sectors_test = sectors_test[:-1]
+                U_test = U_test[:-1]
+                n_samples_train = X_train.shape[0]
+                batch_size_possibilities = np.array(sympy.divisors(n_samples_train))  # [1, 2, 4, 23, 46, 92, 4051, 8102, 16204, 93173, 186346, 372692]
+                batch_size = min(batch_size_possibilities, key=lambda x: abs(x - batch_size_desired))
+                batch_cond = batch_size_lims[0] < batch_size < batch_size_lims[1]
         return X_train, y_train, X_test, y_test, batch_size, sectors_train, sectors_test, U_test
 
     # Neural network
@@ -567,18 +576,20 @@ def predict_mean_turbulence_with_ML_at_BJ(n_trials):
         # Testing
         n_samples_test = X_test.shape[0]
         with torch.no_grad():
-            y_pred = my_nn(Variable(X_test))   # todo: adapt X_test to allow for multiple test points! (previously anem_test was just a len==1 list)
+            y_pred = my_nn(Variable(X_test))
             y_test_total_mean = torch.mean(y_test.view(n_samples_test, n_outputs), axis=0)
             SS_res_test = torch.sum((y_test.view(n_samples_test, n_outputs) - y_pred.view(n_samples_test, n_outputs)) ** 2)
             SS_tot_test = torch.sum((y_test.view(n_samples_test, n_outputs) - y_test_total_mean) ** 2)
             R2_test = 1 - SS_res_test / SS_tot_test
+            # ACCURACY NEEDS TO BE DONE ON NON-NORMALIZED DATA WHEREAS R2 IS EQUAL REGARDLESS OF NORMALIZATION
+            # accuracy = 100 - 100 * torch.mean(torch.abs(y_pred.view(n_samples_test, n_outputs) - y_test.view(n_samples_test, n_outputs)) / y_test.view(n_samples_test, n_outputs))
             idxs_to_print = np.random.randint(0, len(y_pred), 10)  # a few random values to be printed
         if print_results:
             print(f'R2 on test dataset: ----> {R2_test} <---- . Learning rate: {learn_rate}')
             print(f"Prediction: {y_pred[idxs_to_print]}")
             print(f"Reference:   {y_test[idxs_to_print]}")
             print(f'Batch size: {batch_size}')
-        return y_pred, R2_test
+        return y_pred, R2_test.cpu().numpy()
 
     ##################################################################################################################
 
@@ -590,120 +601,149 @@ def predict_mean_turbulence_with_ML_at_BJ(n_trials):
                      'L1Loss': L1Loss(),
                      'LogCoshLoss': LogCoshLoss()}
 
-    def find_optimal_hp_for_each_of_my_cases(my_NN_cases, df_sect_means, df_mins_maxs, n_trials, print_loss_per_epoch=False, print_results=False):
+    def optimize_hp_for_all_cross_val_cases(my_cases, df_sect_means, df_mins_maxs, n_hp_trials, print_loss_per_epoch=False, print_results=False):
         hp_opt_results = []
-        for my_NN_case in my_NN_cases:
-            anem_to_train = my_NN_case['anem_to_train']
-            anem_to_test = my_NN_case['anem_to_test']
-            X_train, y_train, X_test, y_test, batch_size, _, _, _ = get_X_y_train_and_test_and_batch_size_from_anems(anem_to_train, anem_to_test, df_sect_means, df_mins_maxs)
-            print('X_train shape is:' + str(X_train.shape))
-            print('batch_size shape is:' + str(batch_size))
-            # Beautiful MAGIC happening
+        for my_case in my_cases:
+            anem_to_cross_val = my_case['anem_to_cross_val']
             def hp_opt_objective(trial):
                 weight_decay = trial.suggest_float("weight_decay", 1E-7, 1E-1, log=True)
                 lr = trial.suggest_float("lr", 0.001, 0.8, log=True)
                 momentum = trial.suggest_float("momentum", 0., 0.95)
                 n_hid_layers = trial.suggest_int('n_hid_layers', 2, 6)
-                n_epochs = trial.suggest_int('n_epochs', 10, 3000)
+                n_epochs = trial.suggest_int('n_epochs', 10, 1000)
                 activation_fun_name = trial.suggest_categorical('activation', list(activation_fun_dict))
                 activation_fun = activation_fun_dict[activation_fun_name]
                 loss_fun_name = trial.suggest_categorical('loss', list(loss_fun_dict))
                 loss_fun = loss_fun_dict[loss_fun_name]
                 hp = {'lr': lr,
-                      'batch_size': batch_size,
                       'weight_decay': weight_decay,
                       'momentum': momentum,
                       'n_epochs': n_epochs,
                       'n_hid_layers': n_hid_layers,
                       'activation': activation_fun,
                       'loss': loss_fun}
-                _, R2 = train_and_test_NN(X_train, y_train, X_test, y_test, hp=hp, print_loss_per_epoch=print_loss_per_epoch, print_results=print_results)
-                return R2
+                R2_of_all_cross_val = []
+                for anem_to_test in anem_to_cross_val:
+                    anem_to_train = [a for a in anem_to_cross_val if a != anem_to_test]
+                    X_train, y_train, X_test, y_test, batch_size, _, _, _ = get_X_y_train_and_test_and_batch_size_from_anems(anem_to_train, [anem_to_test], df_sect_means, df_mins_maxs)
+                    hp['batch_size'] = batch_size
+                    _, R2 = train_and_test_NN(X_train, y_train, X_test, y_test, hp=hp, print_loss_per_epoch=print_loss_per_epoch, print_results=print_results)
+                    R2_of_all_cross_val.append(float(R2))
+                trial.set_user_attr('R2_each_split', R2_of_all_cross_val)
+                # print(f'R2 of each split (during cross-validation): {R2_of_all_cross_val}')
+                return np.mean(R2_of_all_cross_val)
             while True:
-                try:  # because now and then the ANN produces an error (e.g. weights explode during learning)
+                try:  # because sometimes the ANN produces an error (e.g. weights explode during learning)
                     study = optuna.create_study(direction='maximize')
-                    study.optimize(hp_opt_objective, n_trials=n_trials)
+                    study.optimize(hp_opt_objective, n_trials=n_hp_trials)
                 except ValueError:
                     continue
                 break
-            hp_opt_result = {'anem_to_test': anem_to_test, 'anems_to_train': anem_to_train, 'best_params': study.best_params, 'best_value': study.best_value}
+            hp_opt_result = {'anem_to_cross_val': anem_to_cross_val, 'anem_to_test': my_case['anem_to_test'], 'best_params': study.best_params,
+                             'R2_each_split': study.best_trial.user_attrs['R2_each_split'], 'best_validation_value': study.best_value}
             hp_opt_results.append(hp_opt_result)
         return hp_opt_results
 
-    # my_NN_cases = [{'anem_to_train': ['osp1_A', 'osp2_A', 'synn_A', 'svar_A', 'land_A', 'neso_A'],
-    #                 'anem_to_test': ['bj01','bj02','bj03','bj04','bj05','bj06','bj07','bj08','bj09','bj10','bj11']}]
-    my_NN_cases = [{'anem_to_train': ['osp1_A', 'osp2_A', 'synn_A', 'svar_A', 'land_A'],
-                    'anem_to_test': ['neso_A']}]
+    my_cases = [{'anem_to_cross_val': ['osp1_A', 'osp2_A', 'svar_A', 'land_A', 'neso_A'], # a final anemometer is left out to assess the final model performance, without performing any optimzation
+                 'anem_to_test':      ['synn_A']},                                        # leave-one-out-cross-validation of train+testing+hp_optimization
+                {'anem_to_cross_val': ['osp1_A', 'osp2_A', 'synn_A', 'land_A', 'neso_A'],
+                 'anem_to_test':      ['svar_A']},
+                {'anem_to_cross_val': ['osp2_A', 'synn_A', 'svar_A', 'land_A', 'neso_A'],
+                 'anem_to_test':      ['osp1_A']},
+                {'anem_to_cross_val': ['osp1_A', 'synn_A', 'svar_A', 'land_A', 'neso_A'],
+                 'anem_to_test':      ['osp2_A']},
+                {'anem_to_cross_val': ['osp1_A', 'osp2_A', 'synn_A', 'svar_A', 'neso_A'],
+                 'anem_to_test':      ['land_A']},
+                {'anem_to_cross_val': ['osp1_A', 'osp2_A', 'synn_A', 'svar_A', 'land_A'],
+                 'anem_to_test':      ['neso_A']},
+                ]
 
-    these_hp_opt = find_optimal_hp_for_each_of_my_cases(my_NN_cases, df_sect_means, df_mins_maxs, n_trials=n_trials)
+    these_hp_opt = optimize_hp_for_all_cross_val_cases(my_cases, df_sect_means, df_mins_maxs, n_hp_trials=n_hp_trials)
 
-    # Saving the results into a txt file, only if "these" results are better than the ones already stored in txt
-    for case_idx in range(len(my_NN_cases)):
-        my_NN_case = my_NN_cases[case_idx]
-        anem_to_test = my_NN_case['anem_to_test']
+    # Finally, running the ANN for all Training Cases (no anem is left-out for cross-validation) and testing the ANN for the final test:
+    for case_idx in range(len(my_cases)):
+        my_case = my_cases[case_idx]
+        anem_to_train = my_case['anem_to_cross_val']
+        anem_to_test = my_case['anem_to_test']
+        # Saving the results into a txt file, but first checking if there are already better results stored in txt, and if so, bring them here
         try:
-            with open(f'hp_opt_BJ.txt', 'r') as prev_file:
+            with open(f'{name_prefix}_hp_opt_cross_val.txt', 'r') as prev_file:
                 prev_hp_opt_results = eval(json.load(prev_file))
             tested_results = np.array([[tested_idx, *i['anem_to_test']] for tested_idx, i in enumerate(prev_hp_opt_results)])
             tested_results_idx = np.where(tested_results[:, 1] == anem_to_test)[0]
             if len(tested_results_idx):
-                if these_hp_opt[case_idx]['best_value'] < prev_hp_opt_results[tested_results_idx[0]]['best_value']:
+                if these_hp_opt[case_idx]['best_validation_value'] < prev_hp_opt_results[tested_results_idx[0]]['best_validation_value']:
                     these_hp_opt[case_idx] = prev_hp_opt_results[tested_results_idx[0]]
         except FileNotFoundError:
             print(anem_to_test)
-            print('No file with name: ' + f'hp_opt_BJ.txt !!')
-    hp_opt = copy.deepcopy(these_hp_opt)
-    with open(f'hp_opt_BJ.txt', 'w') as file:
-        file.write(json.dumps(str(hp_opt)))
-
-    for case_idx in range(len(my_NN_cases)):
-        my_NN_case = my_NN_cases[case_idx]
-        anem_to_train = my_NN_case['anem_to_train']
-        anem_to_test = my_NN_case['anem_to_test']
-        hp = copy.deepcopy(hp_opt[case_idx]['best_params'])
+            print('No file with name: ' + f'{name_prefix}_hp_opt_cross_val.txt !!')
+        # Testing the final testing data:
+        hp = copy.deepcopy(these_hp_opt[case_idx]['best_params'])
         if type(hp['activation']) == str:
             hp['activation'] = activation_fun_dict[hp['activation']]
         if type(hp['loss']) == str:
             hp['loss'] = loss_fun_dict[hp['loss']]
         X_train, y_train, X_test, y_test, batch_size, sectors_train, sectors_test, U_test = get_X_y_train_and_test_and_batch_size_from_anems(anem_to_train, anem_to_test, df_sect_means, df_mins_maxs)
         hp['batch_size'] = batch_size
-        y_pred, R2 = train_and_test_NN(X_train, y_train, X_test, y_test, hp=hp, print_loss_per_epoch=True, print_results=True)
-
+        y_pred, R2 = train_and_test_NN(X_train, y_train, X_test, y_test, hp=hp, print_loss_per_epoch=False, print_results=False)
         y_test_nonnorm = np.ndarray.flatten(y_test.cpu().numpy()) * (df_mins_maxs['Iu'].loc['max'] - df_mins_maxs['Iu'].loc['min']) + df_mins_maxs['Iu'].loc['min']
         y_pred_nonnorm = np.ndarray.flatten(y_pred.cpu().numpy()) * (df_mins_maxs['Iu'].loc['max'] - df_mins_maxs['Iu'].loc['min']) + df_mins_maxs['Iu'].loc['min']
+        accuracy = 100 - 100 * np.mean(np.abs(y_pred_nonnorm - y_test_nonnorm) / y_test_nonnorm)
+        print(f'Testing: {anem_to_test}... R2: {np.round(R2,4)}. Accuracy: {np.round(accuracy,4)}')
+        these_hp_opt[case_idx]['final_R2_test_value'] = float(R2)
+        these_hp_opt[case_idx]['final_accuracy'] = float(accuracy)
 
         # PLOT MEANS OF PREDICTIONS
-        R2_ANN = str(np.round(R2.cpu().numpy(), 3))
-        Iu_EN_anem = np.array(Iu_EN[anem_to_test[0][:-2]])
-        Iu_EN_at_sectors_w_data = Iu_EN_anem[sectors_test]
-        R2_with_EN = np.round(r2_score(y_test_nonnorm, Iu_EN_at_sectors_w_data), 3)
-        fig, ax1 = plt.subplots(figsize=(5.5*0.93, 2.5*0.93), dpi=400/0.93)
-        # plt.title(all_pts_nice_str[my_NN_cases[case_idx]['anem_to_test'][0]] + '.  $R^2='+ str(np.round(R2_of_means, 2))+'$')
-        ax1.set_title(f"Sectoral averages of $I_u$ at {bj_pts_nice_str[my_NN_cases[case_idx]['anem_to_test'][0]]}")
-        # plt.scatter(X_test_dirs_nonnorm, y_test_nonnorm, s=0.01, alpha=0.2, c='black') #, label='Measured')
-        ax1.scatter(sectors_test, y_test_nonnorm, s=12, alpha=0.6, c='black', zorder=0.98, edgecolors='none', marker='s', label='Measurements')
-        ax1.scatter(sectors_test, y_pred_nonnorm, s=12, alpha=0.6, c='darkorange', zorder=1.0, edgecolors='none', marker='o', label='ANN predictions')
-        # plt.scatter(np.arange(360), Iu_EN[anem_to_test[0][:-2]], s=4, alpha=0.7, c='deepskyblue', label='NS-EN 1991-1-4')
-        ax1.scatter(sectors_test, Iu_EN_at_sectors_w_data, s=12, alpha=0.6, c='green', zorder=0.99, edgecolors='none', marker='^', label='NS-EN 1991-1-4')
-        ax2 = ax1.twinx()
-        ax2.scatter(sectors_test, U_test, s=3, alpha=0.3, color='deepskyblue', zorder=0.97, edgecolors='none', marker='D', label='$\overline{U}$')
-        # ax2.plot(sectors_test, U_test, alpha=0.3, color='deepskyblue', zorder=0.97, label='$\overline{U}$')
-        ax1.legend(markerscale=2., loc=2, handletextpad=0.1)
-        ax2.legend(markerscale=2., loc=1, handletextpad=0.1)
-        ax1.set_ylabel('$\overline{I_u}$')
-        ax2.set_ylabel('$\overline{U}\/\/\/[m/s]$')
-        ax1.set_xlabel('Wind from direction [\N{DEGREE SIGN}]')
-        ax1.set_xlim([0, 360])
-        ax1.set_xticks([0, 45, 90, 135, 180, 225, 270, 315, 360])
-        ax1.set_xticklabels(['0(N)', '45', '90(E)', '135', '180(S)', '225', '270(W)', '315', '360'])
-        ax1.set_ylim([0, 0.63])
-        ax2.set_ylim([0, 20])
-        fig.tight_layout(pad=0.05)
-        plt.savefig(os.path.join(os.getcwd(), 'plots', f'Bjorna_Iu_Case_{case_idx}_{anem_to_test[0]}_Umin_{U_min}_Sector-{dir_sector_amp}_ANNR2_{R2_ANN}_ENR2_{R2_with_EN}.png'))
-        # plt.show()
+        if make_plots:  # these plots are suitable for the predictions at the middle of Bjørnafjord, where there are no measurements
+            unique_pts = []  # lets not plot the same point twice, even though it might be included twice in the testing
+            for idx_pt_to_test, pt_to_test in enumerate(anem_to_test):
+                if pt_to_test not in unique_pts:
+                    unique_pts.append(pt_to_test)
+                    sectors_test_by_pt = split_list_into_strictly_ascending_sublists(sectors_test)
+                    sectors_test_1_pt = sectors_test_by_pt[idx_pt_to_test]
+                    lens_by_pt = [len(sectors_test_by_pt[i]) for i in range(0,idx_pt_to_test+1)]  # n_sectors for each point. e.g: [360,360,317,302,360,...]
+                    start_idxs_of_each_pt = np.cumsum([0] + lens_by_pt)
+                    pt_slice = slice(start_idxs_of_each_pt[idx_pt_to_test], start_idxs_of_each_pt[idx_pt_to_test+1])
+                    R2_ANN = str(np.round(R2, 3))
+                    fig, ax1 = plt.subplots(figsize=(5.5*0.93, 2.5*0.93), dpi=400/0.93)
+                    ax1.set_title(f"Sectoral averages of $I_u$ at {all_pts_nice_str[my_cases[case_idx]['anem_to_test'][idx_pt_to_test]]}")
+                    ax1.scatter(sectors_test[pt_slice], y_pred_nonnorm[pt_slice], s=12, alpha=0.6, c='darkorange', zorder=1.0, edgecolors='none', marker='o', label='ANN predictions')
+                    if 'bj' in pt_to_test:
+                        Iu_EN_anem = np.array(Iu_EN[pt_to_test])
+                        ax1.scatter(sectors_test[pt_slice], Iu_EN_anem, s=12, alpha=0.6, c='green', zorder=0.99, edgecolors='none', marker='^', label='NS-EN 1991-1-4')
+                        ax1.legend(markerscale=2., loc=1, handletextpad=0.1)
+                    else:
+                        Iu_EN_anem = np.array(Iu_EN[pt_to_test[:-2]])
+                        idxs_to_plot = np.array([i for i in sectors_test[pt_slice] if i in dir_sectors])
+                        ax1.scatter(sectors_test[pt_slice], Iu_EN_anem[idxs_to_plot], s=12, alpha=0.6, c='green', zorder=0.99, edgecolors='none', marker='^', label='NS-EN 1991-1-4')
+                        measur_anem = np.array(y_test_nonnorm[pt_slice])
+                        ax1.scatter(sectors_test[pt_slice], measur_anem, s=12, alpha=0.6, c='black', zorder=0.98, edgecolors='none', marker='s', label='Measurements')
+                        ax2 = ax1.twinx()
+                        ax2.scatter(sectors_test, U_test, s=3, alpha=0.3, color='deepskyblue', zorder=0.97, edgecolors='none', marker='D', label='$\overline{U}$')
+                        ax1.legend(markerscale=2., loc=2, handletextpad=0.1)
+                        ax2.legend(markerscale=2., loc=1, handletextpad=0.1)
+                        ax2.set_ylabel('$\overline{U}\/\/\/[m/s]$')
+                        ax2.set_ylim([0, 20])
+                    ax1.set_ylabel('$\overline{I_u}$')
+                    ax1.set_xlabel('Wind from direction [\N{DEGREE SIGN}]')
+                    ax1.set_xlim([0, 360])
+                    ax1.set_xticks([0, 45, 90, 135, 180, 225, 270, 315, 360])
+                    ax1.set_xticklabels(['0(N)', '45', '90(E)', '135', '180(S)', '225', '270(W)', '315', '360'])
+                    ax1.set_ylim([0, 0.63])
+                    fig.tight_layout(pad=0.05)
+                    plt.savefig(os.path.join(os.getcwd(), 'plots', f'{name_prefix}_Bjorna_Iu_Case_{case_idx}_{anem_to_test[0]}_Umin_{U_min}_Sector-{dir_sector_amp}_ANNR2_{R2_ANN}.png'))
+                    plt.show()
+
+    with open(f'{name_prefix}_hp_opt_cross_val.txt', 'w') as file:
+        file.write(json.dumps(str(these_hp_opt)))
+
     return None
 
-# predict_mean_turbulence_with_ML(n_trials=1)
+for i in range(10):
+    predict_mean_turbulence_with_ML_at_BJ(n_hp_trials=2, name_prefix=str(i), make_plots=True)
 
+
+
+predict_mean_turbulence_with_ML_at_BJ(n_hp_trials=1, name_prefix='TestPlots', make_plots=True)
 
 
