@@ -744,12 +744,18 @@ def predict_mean_turbulence_with_ML_at_BJ(n_hp_trials,  name_prefix, make_plots=
 
     return None
 
-for i in range(10,20):
-    predict_mean_turbulence_with_ML_at_BJ(n_hp_trials=1, name_prefix=str(i), make_plots=True)
+for i in range(20):
+    predict_mean_turbulence_with_ML_at_BJ(n_hp_trials=500, name_prefix=str(i), make_plots=True)
 
 
-def plot_R2_and_accuracies(n_final_tests_per_anem=20):
+for i in range(20):
+    predict_mean_turbulence_with_ML_at_BJ(n_hp_trials=2000, name_prefix='2000_'+str(i), make_plots=True)
+
+
+
+def plot_R2_and_accuracies(n_final_tests_per_anem=20, bw=0.5, markersize=5.5, font_scale=1.18):
     import seaborn as sns
+    import matplotlib.patches as mpatches
 
     results = {}  # shape: ('n_final_tests', n_anems_tested, 'features'), where '' represents dictionary
     for name_prefix in range(n_final_tests_per_anem):
@@ -760,7 +766,7 @@ def plot_R2_and_accuracies(n_final_tests_per_anem=20):
     df_results_acc = pd.DataFrame()
     for t in range(n_final_tests_per_anem):
         for a in range(6):
-            anem_to_test = results[str(t)][a][   'anem_to_test'][0]
+            anem_to_test = results[str(t)][a][    'anem_to_test'][0]
             df_results_R2 = df_results_R2.append({'anem'        :anem_nice_str[anem_to_test],
                                                   'ANN'      :results[str(t)][a]['final_ANN_R2_test_value'],
                                                   'NS-EN 1991-1-4'       :results[str(t)][a]['final_EC_R2_test_value'],
@@ -772,41 +778,105 @@ def plot_R2_and_accuracies(n_final_tests_per_anem=20):
     # df_results_R2_melted =  pd.melt( df_results_R2, id_vars="anem", var_name="Method", value_name="values").dropna()
     # df_results_acc_melted = pd.melt(df_results_acc, id_vars="anem", var_name="Method", value_name="values").dropna()
 
-    import matplotlib.patches as mpatches
+    # Finding the R2 result among the ANN models of each anemometer that is closest to the mean (expected value of) R2.
+    def find_nearest(array, value):
+        array = np.asarray(array)
+        idx = (np.abs(array - value)).argmin()
+        return array[idx]
+    df_results_R2_mean = df_results_R2.groupby('anem').mean()
+    anem_nice_str_no_anem_B = {i:a for i,a in anem_nice_str.items() if '_B' not in i}
+    R2_of_avg_models = [find_nearest(df_results_R2[df_results_R2['anem']==anem]['ANN'], df_results_R2_mean[df_results_R2_mean.index==anem]['ANN'].array[0]) for anem in anem_nice_str_no_anem_B.values()]
+    R2_of_avg_models = {i:R2_of_avg_models[j] for j,i in enumerate(anem_nice_str_no_anem_B.values())}
+    # Adding column of bools, stating which one of the ANN models is the one closest to the mean (the one to be plotted later one as a fair expectation of performance)
+    df_results_R2['closest_to_mean'] = False
+    for idx, row in df_results_R2.iterrows():
+        anem = row['anem']
+        if row['ANN'] == R2_of_avg_models[anem]:
+            df_results_R2.loc[idx, 'closest_to_mean'] = True
+    df_results_acc['closest_to_mean'] = df_results_R2['closest_to_mean']
 
-    ANN_patch = mpatches.Patch(color='darkorange', alpha=0.6, label='ANN predictions')
-    EC_patch = mpatches.Patch(color='green', alpha=0.6, label='NS-EN 1991-1-4')
+    # Patches for the fake plt.legend()
+    ANN_countour_patch = mpatches.Patch(color='navajowhite', edgecolor=None, alpha=1., label='KDE of ANN predictions')
+    ANN_each_patch = plt.plot([],[], color='orange', alpha=0.9, marker="o", markersize=markersize, ls="", label='All ANN models')
+    ANN_plot_patch = plt.plot([], [], color='maroon', alpha=0.9, marker="o", markersize=markersize, ls="", label='Plotted models (Fig. 4)')
+    EC_patch = plt.plot([], [], color='green', alpha=0.9, lw=3.0, label='NS-EN 1991-1-4')
+    plt.close()
 
+    # # R2 Plot
+    # fig, ax = plt.subplots(sharex=True, sharey=True, figsize=(7,5), dpi=400)
+    # sns.set(style="whitegrid")
+    # sns.barplot(x="anem", y='NS-EN 1991-1-4', data=df_results_R2, ci=0, capsize=0.75, errwidth=3, zorder=0.99, alpha=0., facecolor=(1, 1, 1, 0.5), errcolor='green', saturation=1.0)
+    # sns.violinplot(x="anem", y="ANN", data=df_results_R2, inner=None, color='navajowhite', saturation=1.0, bw=bw, scale='width', linewidth=0.1)
+    # plt.setp(ax.collections, alpha=.6)  # setting the transparency
+    # # # sns.boxplot(x='anem', y='values', hue='Method', data=df_results_R2_melted)
+    # # sns.catplot(x='anem', y='values', hue='Method', data=df_results_R2_melted, kind='violin', inner=None, alpha=0.5)
+    # sns.swarmplot(x="anem", y="ANN", hue='closest_to_mean', data=df_results_R2, alpha=0.9, size=markersize, palette=['orange','maroon'])
+    # plt.xticks(rotation=30)
+    # plt.xlabel('')
+    # plt.ylabel('$R^2$')
+    # plt.ylim([-0.7, 1.0])
+    # # plt.legend(handles=[*ANN_each_patch, *ANN_plot_patch, ANN_countour_patch, *EC_patch], loc=3, ncol=2)
+    # ax.get_legend().remove()
+    # sns.despine(left=True)
+    # plt.tight_layout()
+    # plt.show()
+
+
+    # HORIZONTAL TEST
     # R2 Plot
-    fig, axes = plt.subplots(sharex=True, sharey=True) #, figsize=(8,3))
-    sns.set(style="whitegrid")
-    sns.barplot(x="anem", y="ANN", data=df_results_R2, ci=0, capsize=0.8, errwidth=3, zorder=0.99, alpha=0.6, facecolor=(1, 1, 1, 0.5), errcolor='green')
-    sns.violinplot(x="anem", y="ANN", data=df_results_R2, inner=None, label='ANN', color='darkorange', alpha=0.6, bw=0.2, scale='width', linewidth=0.1)
-    # # sns.boxplot(x='anem', y='values', hue='Method', data=df_results_R2_melted)
-    # sns.catplot(x='anem', y='values', hue='Method', data=df_results_R2_melted, kind='violin', inner=None, alpha=0.5)
-    sns.swarmplot(x="anem", y="ANN", data=df_results_R2, color="saddlebrown", alpha=.9)
-    plt.xticks(rotation=30)
-    plt.xlabel('')
-    plt.ylabel('$R^2$')
-    plt.legend(handles=[ANN_patch, EC_patch])
+
+    fig, axs = plt.subplots(sharex=True, sharey=True, figsize=(6,5), dpi=400)
+    plt.xlim([-0.7, 1.0])
+    sns.set(style="whitegrid", font_scale=font_scale)
+    sns.barplot(y="anem", x='NS-EN 1991-1-4', data=df_results_R2, ci=0, capsize=0.75, errwidth=3, zorder=0.99, alpha=0., facecolor=(1, 1, 1, 0.5), errcolor='green', saturation=1.0)
+    sns.violinplot(y="anem", x="ANN", data=df_results_R2, inner=None, color='navajowhite', saturation=1.0, bw=bw, scale='width', linewidth=0.2)
+    plt.yticks(rotation=0)
+    sns.despine(left=True)
     plt.tight_layout()
+    sns.swarmplot(y="anem", x="ANN", hue='closest_to_mean', data=df_results_R2, alpha=0.9, edgecolor='black', linewidth=0.3, size=markersize, palette=['orange','maroon'])
+    axs.get_legend().remove()
+    plt.ylabel('')
+    plt.xlabel('$R^2$')
+    plt.savefig(os.path.join(os.getcwd(), 'plots', f'violin_R2.png'))
+    plt.show()
+    fig, axs = plt.subplots(sharex=True, sharey=True, figsize=(5,5), dpi=400)
+    sns.set(style="whitegrid", font_scale=font_scale)
+    sns.barplot(y="anem", x='NS-EN 1991-1-4', data=df_results_acc, ci=0, capsize=0.75, errwidth=3, zorder=0.99, alpha=0., facecolor=(1, 1, 1, 0.5), errcolor='green', saturation=1.0)
+    sns.violinplot(y="anem", x="ANN", data=df_results_acc, inner=None, color='navajowhite', saturation=1.0, bw=bw, scale='width', linewidth=0.2)
+    plt.xlim([70,100])
+    sns.despine(left=True)
+    sns.swarmplot(y="anem", x="ANN", hue='closest_to_mean', data=df_results_acc, alpha=0.9, edgecolor='black', linewidth=0.3, size=markersize, palette=['orange','maroon'])
+    axs.get_legend().remove()
+    plt.yticks([0, 1, 2, 3, 4, 5], ["", "", "", "", "", ""])
+    plt.ylabel('')
+    plt.xlabel('Accuracy [%]')
+    plt.legend(handles=[*ANN_each_patch, *ANN_plot_patch, ANN_countour_patch, *EC_patch], bbox_to_anchor=(0.6, 0.99))
+    plt.tight_layout()
+    plt.savefig(os.path.join(os.getcwd(), 'plots', f'violin_Acc.png'))
     plt.show()
 
-    # Accuracy Plot
-    fig, axes = plt.subplots(sharex=True, sharey=True) #, figsize=(8,3))
-    sns.set(style="whitegrid")
-    sns.barplot(x="anem", y="ANN", data=df_results_acc, ci=0, capsize=0.8, errwidth=3, zorder=0.99, alpha=0.6, facecolor=(1, 1, 1, 0.5), errcolor='green')
-    sns.violinplot(x="anem", y="ANN", data=df_results_acc, inner=None, label='ANN', color='darkorange', alpha=0.6, bw=0.2, scale='width', linewidth=0.1)
-    # # sns.boxplot(x='anem', y='values', hue='Method', data=df_results_R2_melted)
-    # sns.catplot(x='anem', y='values', hue='Method', data=df_results_R2_melted, kind='violin', inner=None, alpha=0.5)
-    sns.swarmplot(x="anem", y="ANN", data=df_results_acc, color="saddlebrown", alpha=.9)
-    plt.xticks(rotation=30)
-    plt.xlabel('')
-    plt.ylabel('Accuracy [%]')
-    plt.legend(handles=[ANN_patch, EC_patch])
-    plt.tight_layout()
-    plt.show()
+
+
+    # # Accuracy Plot
+    # fig, ax = plt.subplots(sharex=True, sharey=True, figsize=(7,5), dpi=400)
+    # sns.set(style="whitegrid")
+    # sns.barplot(x="anem", y='NS-EN 1991-1-4', data=df_results_acc, ci=0, capsize=0.75, errwidth=3, zorder=0.99, alpha=0., facecolor=(1, 1, 1, 0.5), errcolor='green', saturation=1.0)
+    # sns.violinplot(x="anem", y="ANN", data=df_results_acc, inner=None, color='navajowhite', saturation=1.0, bw=bw, scale='width', linewidth=0.1)
+    # plt.setp(ax.collections, alpha=.6)  # setting the transparency
+    # # # sns.boxplot(x='anem', y='values', hue='Method', data=df_results_acc_melted)
+    # # sns.catplot(x='anem', y='values', hue='Method', data=df_results_acc_melted, kind='violin', inner=None, alpha=0.5)
+    # sns.swarmplot(x="anem", y="ANN", hue='closest_to_mean', data=df_results_acc, alpha=0.9, size=markersize, palette=['orange','maroon'])
+    # plt.xticks(rotation=30)
+    # plt.xlabel('')
+    # plt.ylabel('Accuracy [%]')
+    # plt.ylim([70,100])
+    # plt.legend(handles=[*ANN_each_patch, *ANN_plot_patch, ANN_countour_patch, *EC_patch], loc=1, ncol=2)
+    # sns.despine(left=True)
+    # plt.tight_layout()
+    # plt.show()
 
     pass
 
-plot_R2_and_accuracies(n_final_tests_per_anem=20)
+
+plot_R2_and_accuracies(n_final_tests_per_anem=14)
+
