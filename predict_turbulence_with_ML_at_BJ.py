@@ -752,15 +752,19 @@ for i in range(20):
     predict_mean_turbulence_with_ML_at_BJ(n_hp_trials=2000, name_prefix='2000_'+str(i), make_plots=True)
 
 
-
-def plot_R2_and_accuracies(n_final_tests_per_anem=20, bw=0.5, markersize=5.5, font_scale=1.18):
-    import seaborn as sns
-    import matplotlib.patches as mpatches
-
+def get_results_from_txt_file(n_final_tests_per_anem):
     results = {}  # shape: ('n_final_tests', n_anems_tested, 'features'), where '' represents dictionary
     for name_prefix in range(n_final_tests_per_anem):
         with open(f'{name_prefix}_hp_opt_cross_val.txt', 'r') as file:
             results[str(name_prefix)] = eval(json.load(file))
+    return results
+
+
+def plot_R2_and_accuracies(n_final_tests_per_anem=20, bw=0.5, markersize=5., font_scale=1.18):
+    import seaborn as sns
+    import matplotlib.patches as mpatches
+
+    results = get_results_from_txt_file(n_final_tests_per_anem)
 
     df_results_R2 = pd.DataFrame()
     df_results_acc = pd.DataFrame()
@@ -878,5 +882,92 @@ def plot_R2_and_accuracies(n_final_tests_per_anem=20, bw=0.5, markersize=5.5, fo
     pass
 
 
-plot_R2_and_accuracies(n_final_tests_per_anem=14)
+plot_R2_and_accuracies(n_final_tests_per_anem=18)
+
+
+def plot_histograms_of_hyperparameters(n_final_tests_per_anem):
+    from matplotlib.ticker import MaxNLocator
+    import matplotlib.style
+    import matplotlib as mpl
+    mpl.style.use('default')
+    font = {'family': 'DejaVu Sans',
+            'size': 24}
+    matplotlib.rc('font', **font)
+
+
+    results = get_results_from_txt_file(n_final_tests_per_anem)
+
+    # Converting all results into a dataframe where each row is an "optimal" set of hyperparameters, respective to one optimized ANN
+    list_of_params = list(results['0'][0]['best_params'].keys())
+    df_results_hp = pd.DataFrame(columns=list_of_params)
+    for t in range(n_final_tests_per_anem):
+        for a in range(6):
+            df_results_hp = df_results_hp.append(pd.Series(dtype=float), ignore_index=True)  # add empty row
+            for p in results[str(t)][a]['best_params'].keys():
+                df_results_hp.iloc[-1][p] = results[str(t)][a]['best_params'][p]
+    df_results_hp['loss'] = df_results_hp['loss'].astype(str).str[:-4]
+
+    def plot_loghist(x, bins, color, alpha):
+        hist, bins = np.histogram(x, bins=bins)
+        logbins = np.logspace(np.log10(bins[0]), np.log10(bins[-1]), len(bins))
+        plt.hist(x, bins=logbins, color=color, alpha=alpha)
+        plt.xscale('log')
+
+
+    def plot_common_details():
+        plt.gca().yaxis.set_major_locator(MaxNLocator(integer=True))
+        plt.box(False)
+        plt.grid(axis='y', alpha=0.5)
+        plt.tight_layout()
+        if bool(plt.gca().xaxis.get_label().get_text()):
+            fig_name = plt.gca().xaxis.get_label().get_text()
+        else:
+            fig_name = plt.gca().xaxis.get_ticklabels()[0].get_text()
+        plt.savefig(os.path.join(os.getcwd(), 'plots', f'{fig_name}.png'))
+        plt.show()
+
+    figsize_1 = (8, 6)
+    figsize_2 = (6, 6)
+    color='royalblue'
+    alpha=0.6
+
+    plt.figure(figsize=figsize_1)
+    plot_loghist(df_results_hp['lr'], bins=25, color=color, alpha=alpha)
+    plt.xlabel('Learning rate')
+    plt.ylabel('Frequency')
+    plot_common_details()
+
+    plt.figure(figsize=figsize_1)
+    plot_loghist(df_results_hp['weight_decay'], bins=25, color=color, alpha=alpha)
+    plt.xlabel('Weight decay')
+    plot_common_details()
+
+    plt.figure(figsize=figsize_1)
+    plt.hist(df_results_hp['momentum'], bins=25, color=color, alpha=alpha)
+    plt.xlabel('Momentum')
+    plot_common_details()
+
+    plt.figure(figsize=figsize_2)
+    plt.hist(df_results_hp['n_epochs'], bins=10, color=color, alpha=alpha)
+    plt.ylabel('Frequency')
+    plt.xlabel('Num. of epochs')
+    plot_common_details()
+
+    plt.figure(figsize=figsize_2)
+    plt.hist(df_results_hp['n_hid_layers'], bins=4, color=color, alpha=alpha)
+    plt.xlabel('Num. of hid. layers')
+    plot_common_details()
+
+    plt.figure(figsize=figsize_2)
+    df_results_hp['activation'].value_counts(sort=False).plot.bar(rot=0, color=color, alpha=alpha)
+    plot_common_details()
+
+    plt.figure(figsize=figsize_2)
+    df_results_hp['loss'].value_counts(sort=False).plot.bar(rot=0, color=color, alpha=alpha)
+    plot_common_details()
+
+plot_histograms_of_hyperparameters(n_final_tests_per_anem)
+
+
+
 
