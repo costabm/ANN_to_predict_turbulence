@@ -542,16 +542,21 @@ def predict_mean_turbulence_with_ML_at_BJ(n_hp_trials,  name_prefix, make_plots=
         torch.manual_seed(0)  # make the following random numbers reproducible
         n_features = X_train.shape[1]  # number of independent variables in the polynomial
         n_outputs = y_train.shape[1]  # number of independent variables in the polynomial
-        n_hid_layer_neurons = n_features  # Fancy for: More monomials, more neurons...
+        n_first_hid_layer_neurons = max(round(2 / 3 * n_features), 2)  # Fancy for: More monomials, more neurons...
         my_nn = torch.nn.Sequential()
-        my_nn.add_module(name='0', module=torch.nn.Linear(n_features, n_hid_layer_neurons))  # Second layer
-        my_nn.add_module(name='0A', module=my_activation_func())  # Activation function
-        for i in range(n_hid_layers):  # Hidden layers
+        if n_hid_layers == 0:
+            my_nn.add_module(name='1', module=torch.nn.Linear(n_features, n_outputs))
+            my_nn.add_module(name='1A', module=torch.nn.modules.activation.ReLU())  # Activation function
+        else:
+            my_nn.add_module(name='1', module=torch.nn.Linear(n_features, n_first_hid_layer_neurons))  # Second layer
+            my_nn.add_module(name='1A', module=my_activation_func())  # Activation function
+            for i in range(1, n_hid_layers):  # Hidden layers
+                n_neurons_last_layer = (list(my_nn.modules())[-2]).out_features
+                my_nn.add_module(name=str(i+1), module=torch.nn.Linear(n_neurons_last_layer, max(round(2 / 3 * n_neurons_last_layer), 2)))
+                my_nn.add_module(name=f'{i+1}A', module=my_activation_func())
             n_neurons_last_layer = (list(my_nn.modules())[-2]).out_features
-            my_nn.add_module(name=str(i + 1), module=torch.nn.Linear(n_neurons_last_layer, max(round(2 / 3 * n_neurons_last_layer), 5)))
-            my_nn.add_module(name=f'{i + 1}A', module=my_activation_func())
-        n_neurons_last_layer = (list(my_nn.modules())[-2]).out_features
-        my_nn.add_module(name=str(n_hid_layers + 1), module=torch.nn.Linear(n_neurons_last_layer, n_outputs))  # Output layer
+            my_nn.add_module(name=str(n_hid_layers + 1), module=torch.nn.Linear(n_neurons_last_layer, n_outputs))  # Output layer
+            my_nn.add_module(name=str(n_hid_layers + 1)+'A', module=torch.nn.modules.activation.ReLU())
         optimizer = SGD(my_nn.parameters(), lr=learn_rate, weight_decay=weight_decay, momentum=momentum)  # define the optimizer
         # torch.seed()  # make random numbers again random
         my_nn.to(device)  # To GPU if available
@@ -606,11 +611,11 @@ def predict_mean_turbulence_with_ML_at_BJ(n_hp_trials,  name_prefix, make_plots=
         for my_case in my_cases:
             anem_to_cross_val = my_case['anem_to_cross_val']
             def hp_opt_objective(trial):
-                weight_decay = trial.suggest_float("weight_decay", 1E-7, 1E-1, log=True)
-                lr = trial.suggest_float("lr", 0.001, 0.8, log=True)
+                weight_decay = trial.suggest_float("weight_decay", 1E-5, 1, log=True)
+                lr = trial.suggest_float("lr", 0.001, 1, log=True)
                 momentum = trial.suggest_float("momentum", 0., 0.95)
-                n_hid_layers = trial.suggest_int('n_hid_layers', 2, 6)
-                n_epochs = trial.suggest_int('n_epochs', 10, 1000)
+                n_hid_layers = trial.suggest_int('n_hid_layers', 0, 4)
+                n_epochs = trial.suggest_int('n_epochs', 20, 2000)
                 activation_fun_name = trial.suggest_categorical('activation', list(activation_fun_dict))
                 activation_fun = activation_fun_dict[activation_fun_name]
                 loss_fun_name = trial.suggest_categorical('loss', list(loss_fun_dict))
@@ -745,11 +750,9 @@ def predict_mean_turbulence_with_ML_at_BJ(n_hp_trials,  name_prefix, make_plots=
     return None
 
 for i in range(20):
-    predict_mean_turbulence_with_ML_at_BJ(n_hp_trials=500, name_prefix=str(i), make_plots=True)
+    predict_mean_turbulence_with_ML_at_BJ(n_hp_trials=100, name_prefix=str(i), make_plots=True)
 
 
-for i in range(20):
-    predict_mean_turbulence_with_ML_at_BJ(n_hp_trials=2000, name_prefix='2000_'+str(i), make_plots=True)
 
 
 def get_results_from_txt_file(n_final_tests_per_anem):
@@ -760,7 +763,7 @@ def get_results_from_txt_file(n_final_tests_per_anem):
     return results
 
 
-def plot_R2_and_accuracies(n_final_tests_per_anem=20, bw=0.5, markersize=5., font_scale=1.18):
+def plot_R2_and_accuracies(n_final_tests_per_anem=6, bw=0.5, markersize=5., font_scale=1.18):
     import seaborn as sns
     import matplotlib.patches as mpatches
 
@@ -828,7 +831,6 @@ def plot_R2_and_accuracies(n_final_tests_per_anem=20, bw=0.5, markersize=5., fon
 
     # HORIZONTAL TEST
     # R2 Plot
-
     fig, axs = plt.subplots(sharex=True, sharey=True, figsize=(6,5), dpi=400)
     plt.xlim([-0.7, 1.0])
     sns.set(style="whitegrid", font_scale=font_scale)
@@ -882,10 +884,10 @@ def plot_R2_and_accuracies(n_final_tests_per_anem=20, bw=0.5, markersize=5., fon
     pass
 
 
-plot_R2_and_accuracies(n_final_tests_per_anem=18)
+plot_R2_and_accuracies()
 
 
-def plot_histograms_of_hyperparameters(n_final_tests_per_anem):
+def plot_histograms_of_hyperparameters(n_final_tests_per_anem=6):
     from matplotlib.ticker import MaxNLocator
     import matplotlib.style
     import matplotlib as mpl
@@ -926,15 +928,15 @@ def plot_histograms_of_hyperparameters(n_final_tests_per_anem):
         plt.savefig(os.path.join(os.getcwd(), 'plots', f'{fig_name}.png'))
         plt.show()
 
-    figsize_1 = (8, 6)
-    figsize_2 = (6, 6)
+    figsize_1 = (8, 4)
+    figsize_2 = (6, 4)
     color='royalblue'
     alpha=0.6
 
     plt.figure(figsize=figsize_1)
     plot_loghist(df_results_hp['lr'], bins=25, color=color, alpha=alpha)
     plt.xlabel('Learning rate')
-    plt.ylabel('Frequency')
+    plt.ylabel('Count')
     plot_common_details()
 
     plt.figure(figsize=figsize_1)
@@ -949,24 +951,36 @@ def plot_histograms_of_hyperparameters(n_final_tests_per_anem):
 
     plt.figure(figsize=figsize_2)
     plt.hist(df_results_hp['n_epochs'], bins=10, color=color, alpha=alpha)
-    plt.ylabel('Frequency')
+    plt.ylabel('Count')
     plt.xlabel('Num. of epochs')
     plot_common_details()
 
     plt.figure(figsize=figsize_2)
-    plt.hist(df_results_hp['n_hid_layers'], bins=4, color=color, alpha=alpha)
+    plt.hist(df_results_hp['n_hid_layers'], bins=20, color=color, alpha=alpha)
     plt.xlabel('Num. of hid. layers')
     plot_common_details()
 
     plt.figure(figsize=figsize_2)
-    df_results_hp['activation'].value_counts(sort=False).plot.bar(rot=0, color=color, alpha=alpha)
+    df_results_hp['activation'].value_counts(sort=True).plot.bar(rot=0, color=color, alpha=alpha)
     plot_common_details()
 
+    # bar_order = ['L1', 'SmoothL1','MSE','LogCosh']
+    bar_order = ['MSE', 'LogCosh','L1', 'SmoothL1']
     plt.figure(figsize=figsize_2)
-    df_results_hp['loss'].value_counts(sort=False).plot.bar(rot=0, color=color, alpha=alpha)
+    df_results_hp['loss'].value_counts().loc[bar_order].plot.bar(rot=0, color=color, alpha=alpha)
+    # label = plt.gca().axes.xaxis.get_majorticklabels()[-2]
+    # dx = 0.1
+    # offset = matplotlib.transforms.ScaledTranslation(dx, 0, plt.gcf().dpi_scale_trans)
+    # label.set_transform(label.get_transform() + offset)  # offseting the last label to the right to fit the plot
+    # label_2 = plt.gca().axes.xaxis.get_majorticklabels()[-1]
+    # dx = 0.08
+    # offset = matplotlib.transforms.ScaledTranslation(dx, 0, plt.gcf().dpi_scale_trans)
+    # label_2.set_transform(label_2.get_transform() + offset)  # offseting the last label to the right to fit the plot
+
     plot_common_details()
 
-plot_histograms_of_hyperparameters(n_final_tests_per_anem)
+
+plot_histograms_of_hyperparameters()
 
 
 
