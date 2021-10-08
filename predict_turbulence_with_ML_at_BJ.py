@@ -601,8 +601,7 @@ def predict_mean_turbulence_with_ML_at_BJ(n_hp_trials,  name_prefix, make_plots=
     activation_fun_dict = {'ReLU': torch.nn.modules.activation.ReLU,
                            'ELU': torch.nn.modules.activation.ELU,
                            'LeakyReLU': torch.nn.modules.activation.LeakyReLU}
-    loss_fun_dict = {'SmoothL1Loss': SmoothL1Loss(),
-                     'MSELoss': MSELoss(),
+    loss_fun_dict = {'MSELoss': MSELoss(),  # 'SmoothL1Loss': SmoothL1Loss(),
                      'L1Loss': L1Loss(),
                      'LogCoshLoss': LogCoshLoss()}
 
@@ -749,8 +748,8 @@ def predict_mean_turbulence_with_ML_at_BJ(n_hp_trials,  name_prefix, make_plots=
 
     return None
 
-for i in range(20):
-    predict_mean_turbulence_with_ML_at_BJ(n_hp_trials=100, name_prefix=str(i), make_plots=True)
+for i in range(12,25):
+    predict_mean_turbulence_with_ML_at_BJ(n_hp_trials=500, name_prefix=str(i), make_plots=True)
 
 
 
@@ -763,7 +762,7 @@ def get_results_from_txt_file(n_final_tests_per_anem):
     return results
 
 
-def plot_R2_and_accuracies(n_final_tests_per_anem=6, bw=0.5, markersize=5., font_scale=1.18):
+def plot_R2_and_accuracies(n_final_tests_per_anem=19, bw=0.5, markersize=4.5, font_scale=1.18):
     import seaborn as sns
     import matplotlib.patches as mpatches
 
@@ -831,25 +830,26 @@ def plot_R2_and_accuracies(n_final_tests_per_anem=6, bw=0.5, markersize=5., font
 
     # HORIZONTAL TEST
     # R2 Plot
-    fig, axs = plt.subplots(sharex=True, sharey=True, figsize=(6,5), dpi=400)
-    plt.xlim([-0.7, 1.0])
-    sns.set(style="whitegrid", font_scale=font_scale)
-    sns.barplot(y="anem", x='NS-EN 1991-1-4', data=df_results_R2, ci=0, capsize=0.75, errwidth=3, zorder=0.99, alpha=0., facecolor=(1, 1, 1, 0.5), errcolor='green', saturation=1.0)
-    sns.violinplot(y="anem", x="ANN", data=df_results_R2, inner=None, color='navajowhite', saturation=1.0, bw=bw, scale='width', linewidth=0.2)
-    plt.yticks(rotation=0)
-    sns.despine(left=True)
-    plt.tight_layout()
-    sns.swarmplot(y="anem", x="ANN", hue='closest_to_mean', data=df_results_R2, alpha=0.9, edgecolor='black', linewidth=0.3, size=markersize, palette=['orange','maroon'])
-    axs.get_legend().remove()
-    plt.ylabel('')
-    plt.xlabel('$R^2$')
-    plt.savefig(os.path.join(os.getcwd(), 'plots', f'violin_R2.png'))
-    plt.show()
+    for _ in range(2):
+        fig, axs = plt.subplots(sharex=True, sharey=True, figsize=(6,5), dpi=400)
+        plt.xlim([-1.7, 1.0])
+        sns.set(style="whitegrid", font_scale=font_scale)
+        sns.barplot(y="anem", x='NS-EN 1991-1-4', data=df_results_R2, ci=0, capsize=0.75, errwidth=3, zorder=0.99, alpha=0., facecolor=(1, 1, 1, 0.5), errcolor='green', saturation=1.0)
+        sns.violinplot(y="anem", x="ANN", data=df_results_R2, inner=None, color='navajowhite', saturation=1.0, bw=bw, scale='width', linewidth=0.2)
+        plt.yticks(rotation=0)
+        sns.despine(left=True)
+        plt.tight_layout()
+        sns.swarmplot(y="anem", x="ANN", hue='closest_to_mean', data=df_results_R2, alpha=0.9, edgecolor='black', linewidth=0.3, size=markersize, palette=['orange','maroon'])
+        axs.get_legend().remove()
+        plt.ylabel('')
+        plt.xlabel('$R^2$')
+        plt.savefig(os.path.join(os.getcwd(), 'plots', f'violin_R2.png'))
+        plt.show()
     fig, axs = plt.subplots(sharex=True, sharey=True, figsize=(5,5), dpi=400)
     sns.set(style="whitegrid", font_scale=font_scale)
     sns.barplot(y="anem", x='NS-EN 1991-1-4', data=df_results_acc, ci=0, capsize=0.75, errwidth=3, zorder=0.99, alpha=0., facecolor=(1, 1, 1, 0.5), errcolor='green', saturation=1.0)
     sns.violinplot(y="anem", x="ANN", data=df_results_acc, inner=None, color='navajowhite', saturation=1.0, bw=bw, scale='width', linewidth=0.2)
-    plt.xlim([70,100])
+    plt.xlim([50,100])
     sns.despine(left=True)
     sns.swarmplot(y="anem", x="ANN", hue='closest_to_mean', data=df_results_acc, alpha=0.9, edgecolor='black', linewidth=0.3, size=markersize, palette=['orange','maroon'])
     axs.get_legend().remove()
@@ -887,7 +887,7 @@ def plot_R2_and_accuracies(n_final_tests_per_anem=6, bw=0.5, markersize=5., font
 plot_R2_and_accuracies()
 
 
-def plot_histograms_of_hyperparameters(n_final_tests_per_anem=6):
+def plot_histograms_of_hyperparameters(n_final_tests_per_anem=19):
     from matplotlib.ticker import MaxNLocator
     import matplotlib.style
     import matplotlib as mpl
@@ -965,9 +965,10 @@ def plot_histograms_of_hyperparameters(n_final_tests_per_anem=6):
     plot_common_details()
 
     # bar_order = ['L1', 'SmoothL1','MSE','LogCosh']
-    bar_order = ['MSE', 'LogCosh','L1', 'SmoothL1']
+    bar_order = ['MSE', 'LogCosh','L1']
     plt.figure(figsize=figsize_2)
-    df_results_hp['loss'].value_counts().loc[bar_order].plot.bar(rot=0, color=color, alpha=alpha)
+    df_results_hp['loss'].value_counts(sort=True).plot.bar(rot=0, color=color, alpha=alpha)
+    # df_results_hp['loss'].value_counts(sort=True).loc[bar_order].plot.bar(rot=0, color=color, alpha=alpha)
     # label = plt.gca().axes.xaxis.get_majorticklabels()[-2]
     # dx = 0.1
     # offset = matplotlib.transforms.ScaledTranslation(dx, 0, plt.gcf().dpi_scale_trans)
