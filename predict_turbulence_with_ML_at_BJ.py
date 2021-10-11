@@ -598,23 +598,26 @@ def predict_mean_turbulence_with_ML_at_BJ(n_hp_trials,  name_prefix, make_plots=
 
     ##################################################################################################################
 
-    activation_fun_dict = {'ReLU': torch.nn.modules.activation.ReLU,
-                           'ELU': torch.nn.modules.activation.ELU,
-                           'LeakyReLU': torch.nn.modules.activation.LeakyReLU}
-    loss_fun_dict = {'MSELoss': MSELoss(),  # 'SmoothL1Loss': SmoothL1Loss(),
-                     'L1Loss': L1Loss(),
-                     'LogCoshLoss': LogCoshLoss()}
+    # activation_fun_dict = {'ReLU': torch.nn.modules.activation.ReLU,
+    #                        'ELU': torch.nn.modules.activation.ELU,
+    #                        'LeakyReLU': torch.nn.modules.activation.LeakyReLU}
+    activation_fun_dict = {'ELU': torch.nn.modules.activation.ELU}
+    # loss_fun_dict = {'MSELoss': MSELoss(),  # 'SmoothL1Loss': SmoothL1Loss(),
+    #                  'L1Loss': L1Loss(),
+    #                  'LogCoshLoss': LogCoshLoss()}
+    loss_fun_dict = {'L1Loss': L1Loss()}
+
 
     def optimize_hp_for_all_cross_val_cases(my_cases, df_sect_means, df_mins_maxs, n_hp_trials, print_loss_per_epoch=False, print_results=False):
         hp_opt_results = []
         for my_case in my_cases:
             anem_to_cross_val = my_case['anem_to_cross_val']
             def hp_opt_objective(trial):
-                weight_decay = trial.suggest_float("weight_decay", 1E-5, 1, log=True)
+                weight_decay = trial.suggest_float("weight_decay",1E-3, 1, log=True )  # 1E-5, 1, log=True)
                 lr = trial.suggest_float("lr", 0.001, 1, log=True)
                 momentum = trial.suggest_float("momentum", 0., 0.95)
-                n_hid_layers = trial.suggest_int('n_hid_layers', 0, 4)
-                n_epochs = trial.suggest_int('n_epochs', 20, 2000)
+                n_hid_layers = trial.suggest_int('n_hid_layers',1,1)  # , 0, 4)
+                n_epochs = trial.suggest_int('n_epochs',1000,1000)  #, 20, 2000)
                 activation_fun_name = trial.suggest_categorical('activation', list(activation_fun_dict))
                 activation_fun = activation_fun_dict[activation_fun_name]
                 loss_fun_name = trial.suggest_categorical('loss', list(loss_fun_dict))
@@ -748,8 +751,8 @@ def predict_mean_turbulence_with_ML_at_BJ(n_hp_trials,  name_prefix, make_plots=
 
     return None
 
-for i in range(12,25):
-    predict_mean_turbulence_with_ML_at_BJ(n_hp_trials=500, name_prefix=str(i), make_plots=True)
+for i in range(30,35):
+    predict_mean_turbulence_with_ML_at_BJ(n_hp_trials=100, name_prefix=str(i), make_plots=True)
 
 
 
@@ -762,7 +765,7 @@ def get_results_from_txt_file(n_final_tests_per_anem):
     return results
 
 
-def plot_R2_and_accuracies(n_final_tests_per_anem=19, bw=0.5, markersize=4.5, font_scale=1.18):
+def plot_R2_and_accuracies(n_final_tests_per_anem=20, bw=0.75, markersize=5.5, font_scale=1.18):
     import seaborn as sns
     import matplotlib.patches as mpatches
 
@@ -832,14 +835,16 @@ def plot_R2_and_accuracies(n_final_tests_per_anem=19, bw=0.5, markersize=4.5, fo
     # R2 Plot
     for _ in range(2):
         fig, axs = plt.subplots(sharex=True, sharey=True, figsize=(6,5), dpi=400)
-        plt.xlim([-1.7, 1.0])
+        plt.xlim([-0.7, 1.0])
         sns.set(style="whitegrid", font_scale=font_scale)
         sns.barplot(y="anem", x='NS-EN 1991-1-4', data=df_results_R2, ci=0, capsize=0.75, errwidth=3, zorder=0.99, alpha=0., facecolor=(1, 1, 1, 0.5), errcolor='green', saturation=1.0)
         sns.violinplot(y="anem", x="ANN", data=df_results_R2, inner=None, color='navajowhite', saturation=1.0, bw=bw, scale='width', linewidth=0.2)
         plt.yticks(rotation=0)
         sns.despine(left=True)
         plt.tight_layout()
-        sns.swarmplot(y="anem", x="ANN", hue='closest_to_mean', data=df_results_R2, alpha=0.9, edgecolor='black', linewidth=0.3, size=markersize, palette=['orange','maroon'])
+        fig.set_size_inches((6*2.6,5*2.6))  # increasing figsize before swarmplot and then shrinking it, leads to a nice overlay of points.
+        sns.swarmplot(y="anem", x="ANN", hue='closest_to_mean', data=df_results_R2, alpha=0.7, edgecolor='black', linewidth=0.3, size=markersize, palette=['orange','maroon'])
+        fig.set_size_inches((6, 5))
         axs.get_legend().remove()
         plt.ylabel('')
         plt.xlabel('$R^2$')
@@ -849,19 +854,22 @@ def plot_R2_and_accuracies(n_final_tests_per_anem=19, bw=0.5, markersize=4.5, fo
     sns.set(style="whitegrid", font_scale=font_scale)
     sns.barplot(y="anem", x='NS-EN 1991-1-4', data=df_results_acc, ci=0, capsize=0.75, errwidth=3, zorder=0.99, alpha=0., facecolor=(1, 1, 1, 0.5), errcolor='green', saturation=1.0)
     sns.violinplot(y="anem", x="ANN", data=df_results_acc, inner=None, color='navajowhite', saturation=1.0, bw=bw, scale='width', linewidth=0.2)
-    plt.xlim([50,100])
+    plt.xlim([70,100])
     sns.despine(left=True)
-    sns.swarmplot(y="anem", x="ANN", hue='closest_to_mean', data=df_results_acc, alpha=0.9, edgecolor='black', linewidth=0.3, size=markersize, palette=['orange','maroon'])
+    fig.set_size_inches((5*2.6, 5*2.6))
+    sns.swarmplot(y="anem", x="ANN", hue='closest_to_mean', data=df_results_acc, alpha=0.7, edgecolor='black', linewidth=0.3, size=markersize, palette=['orange','maroon'])
+    fig.set_size_inches((5, 5))
     axs.get_legend().remove()
     plt.yticks([0, 1, 2, 3, 4, 5], ["", "", "", "", "", ""])
     plt.ylabel('')
     plt.xlabel('Accuracy [%]')
     plt.legend(handles=[*ANN_each_patch, *ANN_plot_patch, ANN_countour_patch, *EC_patch], bbox_to_anchor=(0.6, 0.99))
+    # plt.legend(handles=[*ANN_each_patch, *ANN_plot_patch, *EC_patch], bbox_to_anchor=(0.6, 0.99))
     plt.tight_layout()
     plt.savefig(os.path.join(os.getcwd(), 'plots', f'violin_Acc.png'))
     plt.show()
 
-
+    print('Note: To know which ANN correspond to the "closest to the mean", open the dataframe df_results_R2 and notice the column "closest_to_mean"')
 
     # # Accuracy Plot
     # fig, ax = plt.subplots(sharex=True, sharey=True, figsize=(7,5), dpi=400)
@@ -887,7 +895,7 @@ def plot_R2_and_accuracies(n_final_tests_per_anem=19, bw=0.5, markersize=4.5, fo
 plot_R2_and_accuracies()
 
 
-def plot_histograms_of_hyperparameters(n_final_tests_per_anem=19):
+def plot_histograms_of_hyperparameters(n_final_tests_per_anem=20):
     from matplotlib.ticker import MaxNLocator
     import matplotlib.style
     import matplotlib as mpl
@@ -934,30 +942,32 @@ def plot_histograms_of_hyperparameters(n_final_tests_per_anem=19):
     alpha=0.6
 
     plt.figure(figsize=figsize_1)
-    plot_loghist(df_results_hp['lr'], bins=25, color=color, alpha=alpha)
+    plot_loghist(df_results_hp['lr'], bins=20, color=color, alpha=alpha)
     plt.xlabel('Learning rate')
     plt.ylabel('Count')
     plot_common_details()
 
     plt.figure(figsize=figsize_1)
-    plot_loghist(df_results_hp['weight_decay'], bins=25, color=color, alpha=alpha)
+    plot_loghist(df_results_hp['weight_decay'], bins=20, color=color, alpha=alpha)
     plt.xlabel('Weight decay')
     plot_common_details()
 
     plt.figure(figsize=figsize_1)
-    plt.hist(df_results_hp['momentum'], bins=25, color=color, alpha=alpha)
+    plt.hist(df_results_hp['momentum'], bins=20, color=color, alpha=alpha)
     plt.xlabel('Momentum')
     plot_common_details()
 
     plt.figure(figsize=figsize_2)
-    plt.hist(df_results_hp['n_epochs'], bins=10, color=color, alpha=alpha)
+    plt.hist(df_results_hp['n_epochs'], bins=20, color=color, alpha=alpha)
     plt.ylabel('Count')
     plt.xlabel('Num. of epochs')
     plot_common_details()
 
     plt.figure(figsize=figsize_2)
-    plt.hist(df_results_hp['n_hid_layers'], bins=20, color=color, alpha=alpha)
+    df_results_hp['n_hid_layers'].value_counts(sort=False).reindex([0,1,2,3,4], fill_value=0).plot.bar(rot=0, color=color, alpha=alpha)
+    # plt.hist(df_results_hp['n_hid_layers'], bins=15, color=color, alpha=alpha)
     plt.xlabel('Num. of hid. layers')
+    # plt.xlim([-0,4])
     plot_common_details()
 
     plt.figure(figsize=figsize_2)
