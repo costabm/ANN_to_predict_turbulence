@@ -146,7 +146,13 @@ def get_heights_from_X_dirs_and_dists(point_1, array_of_dirs, cone_angles, dists
 
 def get_all_10_min_data_at_z_48m(U_min = 0):
     print('Collecting all 10-min wind data... (takes 10-60 minutes)')
-    windward_dists = [i * ( 5. +  5. * i) for i in range(45)]
+    # windward_dists = [i * ( 5. +  5. * i) for i in range(45)]  # adopted in the main results of the COTech paper
+    # windward_dists = [i * (41.666666666666664 + 41.666666666666664 * i) for i in range(15+1)]
+    windward_dists = [i * (14.245014245014245 + 14.245014245014245 * i) for i in range(25 + 1)]
+    # windward_dists = [i * ( 10.75268817204301 +  10.75268817204301 * i) for i in range(30+1)]
+    # windward_dists = [i * ( 4.830917874396135 +  4.830917874396135 * i) for i in range(45+1)]
+    # windward_dists = [i * (  2.73224043715847 +   2.73224043715847 * i) for i in range(60+1)]
+
     leeward_dists =  [i * (10. + 10. * i) for i in range(10)]
     side_dists =     [i * (10. + 10. * i) for i in range(10)]
     min10_df_all_means, min10_df_all_dirs, min10_df_all_Iu, min10_df_all_Iv, min10_df_all_Iw, min10_df_all_avail = merge_two_all_stats_files()
@@ -367,19 +373,31 @@ def generate_new_data(U_min):
     X_data_nonnorm, y_data_nonnorm, all_anem_list, start_idxs_of_each_anem, ts_data, other_data = get_all_10_min_data_at_z_48m(U_min=U_min) ##  takes a few minutes...
     # # # ##################################################################
     # # # # Saving data
-    data_path = os.path.join(os.getcwd(), 'processed_data_for_ML', f'X_y_ML_ready_data_Umin_{U_min}_masts_6_new_dirs_w_ts')
+    data_path = os.path.join(os.getcwd(), 'processed_data_for_ML', f'X_y_ML_ready_data_Umin_{U_min}_masts_6_new_dirs_w_ts_26_dists')
     np.savez_compressed(data_path, X=X_data_nonnorm, y=y_data_nonnorm, m=all_anem_list, i=start_idxs_of_each_anem, t=np.array(ts_data, dtype=object)) # o=other_data)
     with open(data_path+'_other_data.txt', 'w') as outfile:
         json.dump(other_data, outfile)
     #################################################################
     return None
 
+generate_new_data(U_min=5)
 
-def predict_mean_turbulence_with_ML_at_BJ(n_hp_trials,  name_prefix, make_plots=True):
+
+def predict_mean_turbulence_with_ML_at_BJ(n_hp_trials, name_prefix, n_dists=45, make_plots=True):
+    """
+        n_dists: e.g. 16, 31, 45, 61. Number of entries of each of the Z and R vectors
+    """
     U_min = 5
+    dists_dict = {'16':[i * (41.666666666666664 + 41.666666666666664 * i) for i in range(15+1)],
+                  '26':[i * (14.245014245014245 + 14.245014245014245 * i) for i in range(25+1)],
+                  '31': [i * (10.75268817204301 + 10.75268817204301 * i) for i in range(30 + 1)],
+                  '45':[i * (                5. +                 5. * i) for i in range(45)],  # adopted in the main results of the COTech paper
+                  '61':[i * (  2.73224043715847 +   2.73224043715847 * i) for i in range(60+1)]}
+    dists_vec = dists_dict[str(n_dists)]
+
     dir_sector_amp = 1
     # Loading data already saved
-    data_path = os.path.join(os.getcwd(), 'processed_data_for_ML', f'X_y_ML_ready_data_Umin_{U_min}_masts_6_new_dirs_w_ts')
+    data_path = os.path.join(os.getcwd(), 'processed_data_for_ML', f'X_y_ML_ready_data_Umin_{U_min}_masts_6_new_dirs_w_ts_{n_dists}_dists')
     loaded_data = np.load(data_path + '.npz')
     loaded_data.allow_pickle = True
     X_data_nonnorm =          loaded_data['X']
@@ -406,7 +424,7 @@ def predict_mean_turbulence_with_ML_at_BJ(n_hp_trials,  name_prefix, make_plots=
                 X_U = X_data_nonnorm[anem_slice, 0]
                 X_dirs = X_data_nonnorm[anem_slice, 1]
                 X_sectors = np.searchsorted(dir_sectors, X_dirs, side='right') - 1  # groups all the measured directions into sectors
-                Z_vectors = X_data_nonnorm[anem_slice,2:2+45]
+                Z_vectors = X_data_nonnorm[anem_slice,2:2+n_dists]
                 R_vectors = np.array(np.array(Z_vectors, dtype=bool), dtype=float)
                 y_std_u =  y_data_nonnorm[anem_slice]
                 y_Iu = y_std_u / X_U
@@ -432,7 +450,7 @@ def predict_mean_turbulence_with_ML_at_BJ(n_hp_trials,  name_prefix, make_plots=
             elif 'bj' in pt:
                 X_U = np.zeros(len(dir_sectors)) * np.nan
                 X_sectors = dir_sectors
-                Z_vectors = get_heights_from_X_dirs_and_dists(all_pts_EN_33[pt], dir_sectors, [0], [i * (5. + 5. * i) for i in range(45)])[0]
+                Z_vectors = get_heights_from_X_dirs_and_dists(all_pts_EN_33[pt], dir_sectors, [0], dists_vec)[0]
                 R_vectors = np.array(np.array(Z_vectors, dtype=bool), dtype=float)
                 y_std_u = np.zeros(len(dir_sectors)) * np.nan
                 y_Iu = Iu_EN[pt]
@@ -542,7 +560,7 @@ def predict_mean_turbulence_with_ML_at_BJ(n_hp_trials,  name_prefix, make_plots=
         torch.manual_seed(0)  # make the following random numbers reproducible
         n_features = X_train.shape[1]  # number of independent variables in the polynomial
         n_outputs = y_train.shape[1]  # number of independent variables in the polynomial
-        n_first_hid_layer_neurons = max(round(2 / 3 * n_features), 2)  # Fancy for: More monomials, more neurons...
+        n_first_hid_layer_neurons = max(round(2 / 3 * n_features), 2)
         my_nn = torch.nn.Sequential()
         if n_hid_layers == 0:
             my_nn.add_module(name='1', module=torch.nn.Linear(n_features, n_outputs))
@@ -616,7 +634,7 @@ def predict_mean_turbulence_with_ML_at_BJ(n_hp_trials,  name_prefix, make_plots=
                 weight_decay = trial.suggest_float("weight_decay",1E-3, 1, log=True )  # 1E-5, 1, log=True)
                 lr = trial.suggest_float("lr", 0.001, 1, log=True)
                 momentum = trial.suggest_float("momentum", 0., 0.95)
-                n_hid_layers = trial.suggest_int('n_hid_layers',1,1)  # , 0, 4)
+                n_hid_layers = trial.suggest_int('n_hid_layers',2,2)  # , 0, 4)
                 n_epochs = trial.suggest_int('n_epochs',1000,1000)  #, 20, 2000)
                 activation_fun_name = trial.suggest_categorical('activation', list(activation_fun_dict))
                 activation_fun = activation_fun_dict[activation_fun_name]
@@ -751,8 +769,9 @@ def predict_mean_turbulence_with_ML_at_BJ(n_hp_trials,  name_prefix, make_plots=
 
     return None
 
-for i in range(30,35):
-    predict_mean_turbulence_with_ML_at_BJ(n_hp_trials=100, name_prefix=str(i), make_plots=True)
+for n_dists in [26]:  # [16,31,45,61]
+    for i in range(0,5):
+        predict_mean_turbulence_with_ML_at_BJ(n_hp_trials=50, name_prefix=f'dists_{n_dists}_'+str(i),  n_dists = n_dists, make_plots=True)
 
 
 
@@ -760,12 +779,12 @@ for i in range(30,35):
 def get_results_from_txt_file(n_final_tests_per_anem):
     results = {}  # shape: ('n_final_tests', n_anems_tested, 'features'), where '' represents dictionary
     for name_prefix in range(n_final_tests_per_anem):
-        with open(f'{name_prefix}_hp_opt_cross_val.txt', 'r') as file:
+        with open(f'dists_26_{name_prefix}_hp_opt_cross_val.txt', 'r') as file:
             results[str(name_prefix)] = eval(json.load(file))
     return results
 
 
-def plot_R2_and_accuracies(n_final_tests_per_anem=20, bw=0.75, markersize=5.5, font_scale=1.18):
+def plot_R2_and_accuracies(n_final_tests_per_anem=5, bw=0.75, markersize=5.5, font_scale=1.18):
     import seaborn as sns
     import matplotlib.patches as mpatches
 
