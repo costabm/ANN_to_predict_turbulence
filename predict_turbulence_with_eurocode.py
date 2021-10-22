@@ -1,5 +1,5 @@
 import numpy as np
-from predict_turbulence_with_ML import plot_topography_per_anem, example_of_elevation_profile_at_given_point_dir_dist, nice_str_dict
+from predict_10min_turbulence_with_ML_old import plot_topography_per_anem, example_of_elevation_profile_at_given_point_dir_dist, nice_str_dict
 from orography import synn_EN_33, svar_EN_33, osp1_EN_33, osp2_EN_33, land_EN_33, neso_EN_33
 import matplotlib.pyplot as plt
 import matplotlib

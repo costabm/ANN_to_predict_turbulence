@@ -380,10 +380,30 @@ def generate_new_data(U_min):
     #################################################################
     return None
 
-generate_new_data(U_min=5)
+# generate_new_data(U_min=5)
+
+# # Cases
+# my_cases = [{'anem_to_cross_val': ['osp1_A', 'osp2_A', 'svar_A', 'land_A', 'neso_A'], # a final anemometer is left out to assess the final model performance, without performing any optimzation
+#              'anem_to_test':      ['synn_A']},                                        # leave-one-out-cross-validation of train+testing+hp_optimization
+#             {'anem_to_cross_val': ['osp1_A', 'osp2_A', 'synn_A', 'land_A', 'neso_A'],
+#              'anem_to_test':      ['svar_A']},
+#             {'anem_to_cross_val': ['osp2_A', 'synn_A', 'svar_A', 'land_A', 'neso_A'],
+#              'anem_to_test':      ['osp1_A']},
+#             {'anem_to_cross_val': ['osp1_A', 'synn_A', 'svar_A', 'land_A', 'neso_A'],
+#              'anem_to_test':      ['osp2_A']},
+#             {'anem_to_cross_val': ['osp1_A', 'osp2_A', 'synn_A', 'svar_A', 'neso_A'],
+#              'anem_to_test':      ['land_A']},
+#             {'anem_to_cross_val': ['osp1_A', 'osp2_A', 'synn_A', 'svar_A', 'land_A'],
+#              'anem_to_test':      ['neso_A']},
+#             ]
+my_cases = [{'anem_to_cross_val': ['synn_A', 'osp1_A', 'osp2_A', 'svar_A', 'land_A', 'neso_A'], # a final anemometer is left out to assess the final model performance, without performing any optimzation
+             'anem_to_test':      ['bj01']}]
+
+# my_cases = [{'anem_to_cross_val': ['synn_A', 'osp1_A', 'osp2_A', 'svar_A', 'land_A', 'neso_A'], # a final anemometer is left out to assess the final model performance, without performing any optimzation
+#              'anem_to_test':      list(bj_pts_EN_33.keys())}]
 
 
-def predict_mean_turbulence_with_ML_at_BJ(n_hp_trials, name_prefix, n_dists=45, make_plots=True):
+def predict_mean_turbulence_with_ML_at_BJ(my_cases, n_hp_trials, name_prefix, n_dists=45, make_plots=True):
     """
         n_dists: e.g. 16, 31, 45, 61. Number of entries of each of the Z and R vectors
     """
@@ -669,20 +689,6 @@ def predict_mean_turbulence_with_ML_at_BJ(n_hp_trials, name_prefix, n_dists=45, 
             hp_opt_results.append(hp_opt_result)
         return hp_opt_results
 
-    my_cases = [{'anem_to_cross_val': ['osp1_A', 'osp2_A', 'svar_A', 'land_A', 'neso_A'], # a final anemometer is left out to assess the final model performance, without performing any optimzation
-                 'anem_to_test':      ['synn_A']},                                        # leave-one-out-cross-validation of train+testing+hp_optimization
-                {'anem_to_cross_val': ['osp1_A', 'osp2_A', 'synn_A', 'land_A', 'neso_A'],
-                 'anem_to_test':      ['svar_A']},
-                {'anem_to_cross_val': ['osp2_A', 'synn_A', 'svar_A', 'land_A', 'neso_A'],
-                 'anem_to_test':      ['osp1_A']},
-                {'anem_to_cross_val': ['osp1_A', 'synn_A', 'svar_A', 'land_A', 'neso_A'],
-                 'anem_to_test':      ['osp2_A']},
-                {'anem_to_cross_val': ['osp1_A', 'osp2_A', 'synn_A', 'svar_A', 'neso_A'],
-                 'anem_to_test':      ['land_A']},
-                {'anem_to_cross_val': ['osp1_A', 'osp2_A', 'synn_A', 'svar_A', 'land_A'],
-                 'anem_to_test':      ['neso_A']},
-                ]
-
     these_hp_opt = optimize_hp_for_all_cross_val_cases(my_cases, df_sect_means, df_mins_maxs, n_hp_trials=n_hp_trials)
 
     # Finally, running the ANN for all Training Cases (no anem is left-out for cross-validation) and testing the ANN for the final test:
@@ -717,7 +723,7 @@ def predict_mean_turbulence_with_ML_at_BJ(n_hp_trials, name_prefix, n_dists=45, 
         if 'bj' in anem_to_test:
             Iu_EN_anem = np.array(Iu_EN[anem_to_test[0]])
         else:
-            Iu_EN_anem = np.array(Iu_EN[anem_to_test[0][:-2]])[idxs_sectors_test]
+            Iu_EN_anem = np.array(Iu_EN[anem_to_test[0]])[idxs_sectors_test]
         accuracy_ANN = 100 - 100 * np.mean(np.abs(y_pred_nonnorm - y_test_nonnorm) / y_test_nonnorm)
         accuracy_EC  = 100 - 100 * np.mean(np.abs(    Iu_EN_anem - y_test_nonnorm) / y_test_nonnorm)
         print(f'Testing: {anem_to_test[0]}... R2: {np.round(R2,4)}. Accuracy: {np.round(accuracy_ANN,4)}')
@@ -769,11 +775,9 @@ def predict_mean_turbulence_with_ML_at_BJ(n_hp_trials, name_prefix, n_dists=45, 
 
     return None
 
-for n_dists in [26]:  # [16,31,45,61]
-    for i in range(0,5):
-        predict_mean_turbulence_with_ML_at_BJ(n_hp_trials=50, name_prefix=f'dists_{n_dists}_'+str(i),  n_dists = n_dists, make_plots=True)
-
-
+for n_dists in [45]:  # n_dists is the number of upstream points in the Z and R vectors used in the input. 45 is the default (but 16, 31, and 60 points were also attempted, with similar results)
+    for i in range(0,20):
+        predict_mean_turbulence_with_ML_at_BJ(my_cases, n_hp_trials=50, name_prefix=f'test_bj_11_points_'+str(i))
 
 
 def get_results_from_txt_file(n_final_tests_per_anem):
