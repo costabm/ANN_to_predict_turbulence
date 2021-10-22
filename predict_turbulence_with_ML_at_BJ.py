@@ -396,11 +396,11 @@ def generate_new_data(U_min):
 #             {'anem_to_cross_val': ['osp1_A', 'osp2_A', 'synn_A', 'svar_A', 'land_A'],
 #              'anem_to_test':      ['neso_A']},
 #             ]
-my_cases = [{'anem_to_cross_val': ['synn_A', 'osp1_A', 'osp2_A', 'svar_A', 'land_A', 'neso_A'], # a final anemometer is left out to assess the final model performance, without performing any optimzation
-             'anem_to_test':      ['bj01']}]
-
 # my_cases = [{'anem_to_cross_val': ['synn_A', 'osp1_A', 'osp2_A', 'svar_A', 'land_A', 'neso_A'], # a final anemometer is left out to assess the final model performance, without performing any optimzation
-#              'anem_to_test':      list(bj_pts_EN_33.keys())}]
+#              'anem_to_test':      ['bj01']}]
+
+my_cases = [{'anem_to_cross_val': ['synn_A', 'osp1_A', 'osp2_A', 'svar_A', 'land_A', 'neso_A'], # a final anemometer is left out to assess the final model performance, without performing any optimzation
+             'anem_to_test':      list(bj_pts_EN_33.keys())}]
 
 
 def predict_mean_turbulence_with_ML_at_BJ(my_cases, n_hp_trials, name_prefix, n_dists=45, make_plots=True):
@@ -720,12 +720,13 @@ def predict_mean_turbulence_with_ML_at_BJ(my_cases, n_hp_trials, name_prefix, n_
         y_pred, R2 = train_and_test_NN(X_train, y_train, X_test, y_test, hp=hp, print_loss_per_epoch=False, print_results=False)
         y_test_nonnorm = np.ndarray.flatten(y_test.cpu().numpy()) * (df_mins_maxs['Iu'].loc['max'] - df_mins_maxs['Iu'].loc['min']) + df_mins_maxs['Iu'].loc['min']
         y_pred_nonnorm = np.ndarray.flatten(y_pred.cpu().numpy()) * (df_mins_maxs['Iu'].loc['max'] - df_mins_maxs['Iu'].loc['min']) + df_mins_maxs['Iu'].loc['min']
-        if 'bj' in anem_to_test:
-            Iu_EN_anem = np.array(Iu_EN[anem_to_test[0]])
+        if any('bj' in item for item in anem_to_test):
+            Iu_EN_anem = np.array([Iu_EN[anem_to_test[i]] for i in range(len(anem_to_test))]).flatten()
         else:
+            assert len(anem_to_test)==0, 'When testing bj points, its ok to do it on several points, otherwise, test only one mast location at the time'
             Iu_EN_anem = np.array(Iu_EN[anem_to_test[0]])[idxs_sectors_test]
         accuracy_ANN = 100 - 100 * np.mean(np.abs(y_pred_nonnorm - y_test_nonnorm) / y_test_nonnorm)
-        accuracy_EC  = 100 - 100 * np.mean(np.abs(    Iu_EN_anem - y_test_nonnorm) / y_test_nonnorm)
+        accuracy_EC = 100 - 100 * np.mean(np.abs(Iu_EN_anem.flatten() - y_test_nonnorm) / y_test_nonnorm)
         print(f'Testing: {anem_to_test[0]}... R2: {np.round(R2,4)}. Accuracy: {np.round(accuracy_ANN,4)}')
         these_hp_opt[case_idx]['final_ANN_R2_test_value'] = float(R2)
         these_hp_opt[case_idx]['final_ANN_accuracy'] = float(accuracy_ANN)
@@ -748,10 +749,11 @@ def predict_mean_turbulence_with_ML_at_BJ(my_cases, n_hp_trials, name_prefix, n_
                     ax1.set_title(f"Sectoral averages of $I_u$ at {all_pts_nice_str[my_cases[case_idx]['anem_to_test'][idx_pt_to_test]]}")
                     ax1.scatter(sectors_test[pt_slice], y_pred_nonnorm[pt_slice], s=12, alpha=0.6, c='darkorange', zorder=1.0, edgecolors='none', marker='o', label='ANN predictions')
                     if 'bj' in pt_to_test:
-                        ax1.scatter(sectors_test[pt_slice], Iu_EN_anem, s=12, alpha=0.6, c='green', zorder=0.99, edgecolors='none', marker='^', label='NS-EN 1991-1-4')
+                        # todo: IF YOU GET ANY ERRORS, REMOVE [pt_slice] FROM THE 2 FOLLOWING Iu_EN_anem
+                        ax1.scatter(sectors_test[pt_slice], Iu_EN_anem[pt_slice], s=12, alpha=0.6, c='green', zorder=0.99, edgecolors='none', marker='^', label='NS-EN 1991-1-4')
                         ax1.legend(markerscale=2., loc=1, handletextpad=0.1)
                     else:
-                        ax1.scatter(sectors_test[pt_slice], Iu_EN_anem, s=12, alpha=0.6, c='green', zorder=0.99, edgecolors='none', marker='^', label='NS-EN 1991-1-4')
+                        ax1.scatter(sectors_test[pt_slice], Iu_EN_anem[pt_slice], s=12, alpha=0.6, c='green', zorder=0.99, edgecolors='none', marker='^', label='NS-EN 1991-1-4')
                         measur_anem = np.array(y_test_nonnorm[pt_slice])
                         ax1.scatter(sectors_test[pt_slice], measur_anem, s=12, alpha=0.6, c='black', zorder=0.98, edgecolors='none', marker='s', label='Measurements')
                         ax2 = ax1.twinx()
