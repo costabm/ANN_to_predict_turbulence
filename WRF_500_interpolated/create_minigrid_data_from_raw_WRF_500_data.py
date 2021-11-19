@@ -110,7 +110,7 @@ def create_minigrid_data_func():
     plt.axhline(deg(min_bridge_lat), c='orange', alpha=0.5, linestyle='-.')
     plt.axvline(deg(max_bridge_lon), c='orange', alpha=0.5, linestyle='-.')
     plt.axvline(deg(min_bridge_lon), c='orange', alpha=0.5, linestyle='-.')
-    plt.gca().set_aspect(1/np.cos(lat_mid_Bj))  # Very important: going 1 deg to west is not the same distance in meters as going 1 deg north. The proportion is np.cos(lat_mid_Bj)
+    plt.gca().set_aspect(lat_lon_aspect_ratio)  # Very important: going 1 deg to west is not the same distance in meters as going 1 deg north. The proportion is np.cos(lat_mid_Bj)
     # plt.legend()
     plt.show()
 
