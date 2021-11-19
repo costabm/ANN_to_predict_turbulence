@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import matplotlib
 from scipy.interpolate import griddata
 import netCDF4  # necessary to open the raw data. https://unidata.github.io/netcdf4-python/
-from create_minigrid_data_from_raw_WRF_500_data import bridge_WRF_nodes_coor_func
+from create_minigrid_data_from_raw_WRF_500_data import bridge_WRF_nodes_coor_func, lat_mid_Bj
 
 
 generate_new_WRF_at_bridge_nodes_file = False
@@ -87,15 +87,16 @@ norm = matplotlib.colors.Normalize()
 sm = matplotlib.cm.ScalarMappable(cmap=cm, norm=norm)
 ws_colors = cm(norm(ws_to_plot))
 wd_to_plot = np.deg2rad(df_WRF[wd_cols].iloc[idx_to_plot].to_numpy())
-plt.figure(dpi=300)
+plt.figure(figsize=(4,6), dpi=300)
 plt.quiver(*np.array([lons_bridge, lats_bridge]), ws_to_plot * np.cos(wd_to_plot), ws_to_plot * np.sin(wd_to_plot),
            color=ws_colors, angles='uv', scale=100, width= 0.015, headlength=3, headaxislength=3)
-plt.colorbar(sm)
-plt.xlim(5.366, 5.386)
+cbar = plt.colorbar(sm)
+cbar.set_label('U [m/s]')
+plt.xlim(5.36, 5.40)
 plt.ylim(60.082, 60.133)
 plt.xlabel('Longitude [$\degree$]')
 plt.ylabel('Latitude [$\degree$]')
-plt.gca().set_aspect('equal', adjustable='box')
+plt.gca().set_aspect(1/np.cos(lat_mid_Bj), adjustable='box')
 plt.tight_layout()
 plt.show()
 

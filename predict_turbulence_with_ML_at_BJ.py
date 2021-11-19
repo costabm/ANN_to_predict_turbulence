@@ -52,16 +52,16 @@ latlons_bridge = bridge_WRF_nodes_coor_func(n_bridge_WRF_nodes = n_bridge_nodes,
 # to convert from Lat/Lon to UTM-33, use the website: https://www.kartverket.no/en/on-land/posisjon/transformere-koordinater-enkeltvis
 assert n_bridge_nodes == 11, "n_bridge_nodes needs to be 11. Otherwise, you need to manually create the new array of bridge node coordinates, using the website above"
 bj_coors = np.array([[-34449.260, 6699999.046],
-                     [-34244.818, 6700380.872],
-                     [-34057.265, 6700792.767],
-                     [-33888.469, 6701230.609],
-                     [-33740.109, 6701690.024],
-                     [-33613.662, 6702166.417],
-                     [-33510.378, 6702655.026],
-                     [-33431.282, 6703150.969],
-                     [-33377.153, 6703649.290],
-                     [-33348.522, 6704145.006],
-                     [-33345.665, 6704633.167]])
+                     [-34098.712, 6700359.394],
+                     [-33786.051, 6700752.909],
+                     [-33514.390, 6701175.648],
+                     [-33286.431, 6701623.380],
+                     [-33104.435, 6702091.622],
+                     [-32970.204, 6702575.689],
+                     [-32885.057, 6703070.741],
+                     [-32849.826, 6703571.830],
+                     [-32864.842, 6704073.945],
+                     [-32929.936, 6704572.075]])
 bj_pts_EN_33 = {}
 bj_pts_nice_str = {}
 for i in range(n_bridge_nodes):
@@ -304,9 +304,8 @@ def plot_roughness_transitions_per_anem(list_of_degs = list(range(360)), step_di
     return None
 
 
-def get_all_Iu_with_eurocode():
+def get_all_Iu_with_eurocode(z = 48):
     transition_zones = get_all_roughness_transition_zones()
-    z = 48
     kI = 1.0
     c0 = 1.0
     z0_sea = 0.003
@@ -365,7 +364,7 @@ def get_all_Iu_with_eurocode():
             Iu[pt].append(numerator / denominator)
     return Iu
 Iu_EN = get_all_Iu_with_eurocode()
-
+Iu_14m_EN = get_all_Iu_with_eurocode(z=14.5)
 
 def generate_new_data(U_min):
     ##################################################################
@@ -403,14 +402,14 @@ my_cases = [{'anem_to_cross_val': ['synn_A', 'osp1_A', 'osp2_A', 'svar_A', 'land
              'anem_to_test':      list(bj_pts_EN_33.keys())}]
 
 
-def predict_mean_turbulence_with_ML_at_BJ(my_cases, n_hp_trials, name_prefix, n_dists=45, make_plots=True):
+def predict_mean_turbulence_with_ML_at_BJ(my_cases, n_hp_trials, name_prefix, n_dists=45, store_predictions=False, make_plots=True):
     """
         n_dists: e.g. 16, 31, 45, 61. Number of entries of each of the Z and R vectors
     """
     U_min = 5
     dists_dict = {'16':[i * (41.666666666666664 + 41.666666666666664 * i) for i in range(15+1)],
                   '26':[i * (14.245014245014245 + 14.245014245014245 * i) for i in range(25+1)],
-                  '31': [i * (10.75268817204301 + 10.75268817204301 * i) for i in range(30 + 1)],
+                  '31':[i * (10.75268817204301  + 10.75268817204301  * i) for i in range(30+1)],
                   '45':[i * (                5. +                 5. * i) for i in range(45)],  # adopted in the main results of the COTech paper
                   '61':[i * (  2.73224043715847 +   2.73224043715847 * i) for i in range(60+1)]}
     dists_vec = dists_dict[str(n_dists)]
@@ -733,14 +732,34 @@ def predict_mean_turbulence_with_ML_at_BJ(my_cases, n_hp_trials, name_prefix, n_
         these_hp_opt[case_idx]['final_EC_R2_test_value'] = float(r2_score(y_test_nonnorm, Iu_EN_anem))
         these_hp_opt[case_idx]['final_EC_accuracy'] =  float(accuracy_EC)
 
-        # PLOT MEANS OF PREDICTIONS
+        sectors_test_by_pt = split_list_into_strictly_ascending_sublists(sectors_test)
+
+        # STORING PREDICTIONS
+        if store_predictions:
+            ANN_48m_dict_to_store = {}
+            EN_48m_dict_to_store = {}
+            EN_14m_dict_to_store = {}
+            for idx_pt_to_test, pt_to_test in enumerate(anem_to_test):
+                lens_by_pt = [len(sectors_test_by_pt[i]) for i in range(0, idx_pt_to_test + 1)]  # n_sectors for each point. e.g: [360,360,317,302,360,...]
+                start_idxs_of_each_pt = np.cumsum([0] + lens_by_pt)
+                pt_slice = slice(start_idxs_of_each_pt[idx_pt_to_test], start_idxs_of_each_pt[idx_pt_to_test + 1])  # only meant when sectors_test includes several tested anems??
+                ANN_48m_dict_to_store[pt_to_test] = {'sector':sectors_test[pt_slice].tolist(), 'Iu':y_pred_nonnorm[pt_slice].tolist()}
+                EN_48m_dict_to_store[pt_to_test]  = {'sector':sectors_test[pt_slice].tolist(), 'Iu':Iu_EN[pt_to_test]}
+                EN_14m_dict_to_store[pt_to_test]  = {'sector':sectors_test[pt_slice].tolist(), 'Iu':Iu_14m_EN[pt_to_test]}
+            with open(r'Iu_48m_ANN_preds.json', 'w', encoding='utf-8') as f:
+                json.dump(ANN_48m_dict_to_store, f, ensure_ascii=False, indent=4)
+            with open(r'Iu_48m_EN_preds.json', 'w', encoding='utf-8') as f:
+                json.dump(EN_48m_dict_to_store, f, ensure_ascii=False, indent=4)
+            with open(r'Iu_14m_EN_preds.json', 'w', encoding='utf-8') as f:
+                json.dump(EN_14m_dict_to_store, f, ensure_ascii=False, indent=4)
+
+        # PLOT PREDICTIONS
         if make_plots:  # these plots are suitable for the predictions at the middle of Bjørnafjord, where there are no measurements
             unique_pts = []  # lets not plot the same point twice, even though it might be included twice in the testing
             for idx_pt_to_test, pt_to_test in enumerate(anem_to_test):
                 if pt_to_test not in unique_pts:
                     unique_pts.append(pt_to_test)
-                    sectors_test_by_pt = split_list_into_strictly_ascending_sublists(sectors_test)
-                    sectors_test_1_pt = sectors_test_by_pt[idx_pt_to_test]
+                    # sectors_test_1_pt = sectors_test_by_pt[idx_pt_to_test]
                     lens_by_pt = [len(sectors_test_by_pt[i]) for i in range(0,idx_pt_to_test+1)]  # n_sectors for each point. e.g: [360,360,317,302,360,...]
                     start_idxs_of_each_pt = np.cumsum([0] + lens_by_pt)
                     pt_slice = slice(start_idxs_of_each_pt[idx_pt_to_test], start_idxs_of_each_pt[idx_pt_to_test+1])  # only meant when sectors_test includes several tested anems??
@@ -749,8 +768,9 @@ def predict_mean_turbulence_with_ML_at_BJ(my_cases, n_hp_trials, name_prefix, n_
                     ax1.set_title(f"Sectoral averages of $I_u$ at {all_pts_nice_str[my_cases[case_idx]['anem_to_test'][idx_pt_to_test]]}")
                     ax1.scatter(sectors_test[pt_slice], y_pred_nonnorm[pt_slice], s=12, alpha=0.6, c='darkorange', zorder=1.0, edgecolors='none', marker='o', label='ANN predictions')
                     if 'bj' in pt_to_test:
-                        # todo: IF YOU GET ANY ERRORS, REMOVE [pt_slice] FROM THE 2 FOLLOWING Iu_EN_anem
+                        # IF YOU GET ANY ERRORS, REMOVE [pt_slice] FROM THE 2 FOLLOWING Iu_EN_anem
                         ax1.scatter(sectors_test[pt_slice], Iu_EN_anem[pt_slice], s=12, alpha=0.6, c='green', zorder=0.99, edgecolors='none', marker='^', label='NS-EN 1991-1-4')
+                        ax1.scatter(sectors_test[pt_slice], Iu_14m_EN[pt_to_test], s=12, alpha=0.6, c='blue', zorder=0.99, edgecolors='none', marker='^', label='NS-EN 1991-1-4 (Z=14.5m)')
                         ax1.legend(markerscale=2., loc=1, handletextpad=0.1)
                     else:
                         ax1.scatter(sectors_test[pt_slice], Iu_EN_anem[pt_slice], s=12, alpha=0.6, c='green', zorder=0.99, edgecolors='none', marker='^', label='NS-EN 1991-1-4')
@@ -778,8 +798,8 @@ def predict_mean_turbulence_with_ML_at_BJ(my_cases, n_hp_trials, name_prefix, n_
     return None
 
 for n_dists in [45]:  # n_dists is the number of upstream points in the Z and R vectors used in the input. 45 is the default (but 16, 31, and 60 points were also attempted, with similar results)
-    for i in range(0,20):
-        predict_mean_turbulence_with_ML_at_BJ(my_cases, n_hp_trials=50, name_prefix=f'test_bj_11_points_'+str(i))
+    for i in range(0,1):
+        predict_mean_turbulence_with_ML_at_BJ(my_cases, n_hp_trials=50, name_prefix=f'Iu_bj_11_points_'+str(i), n_dists=n_dists, store_predictions=True)
 
 
 def get_results_from_txt_file(n_final_tests_per_anem):
