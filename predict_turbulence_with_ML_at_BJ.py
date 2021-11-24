@@ -799,13 +799,13 @@ def predict_mean_turbulence_with_ML_at_BJ(my_cases, n_hp_trials, name_prefix, n_
 
 for n_dists in [45]:  # n_dists is the number of upstream points in the Z and R vectors used in the input. 45 is the default (but 16, 31, and 60 points were also attempted, with similar results)
     for i in range(0,1):
-        predict_mean_turbulence_with_ML_at_BJ(my_cases, n_hp_trials=50, name_prefix=f'Iu_bj_11_points_'+str(i), n_dists=n_dists, store_predictions=True)
+        predict_mean_turbulence_with_ML_at_BJ(my_cases, n_hp_trials=1, name_prefix=f'Iu_bj_11_points_'+str(i), n_dists=n_dists, store_predictions=True)
 
 
 def get_results_from_txt_file(n_final_tests_per_anem):
     results = {}  # shape: ('n_final_tests', n_anems_tested, 'features'), where '' represents dictionary
     for name_prefix in range(n_final_tests_per_anem):
-        with open(f'dists_26_{name_prefix}_hp_opt_cross_val.txt', 'r') as file:
+        with open(f'dists_45_{name_prefix}_hp_opt_cross_val.txt', 'r') as file:
             results[str(name_prefix)] = eval(json.load(file))
     return results
 
