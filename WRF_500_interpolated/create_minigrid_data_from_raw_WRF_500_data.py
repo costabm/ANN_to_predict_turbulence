@@ -3,10 +3,10 @@ Running this file will read the raw file with all WRF 500m datapoints, that can 
 O:\Utbygging\Fagress\BFA40 Konstruksjoner\10 Faggrupper\01 Metocean\Data\Vinddata\3d\Vind\KVT_Bjornafjorden_10m_ws10m_xyt.nc4
 
 This file was also copied locally (could not read it directly in the O: directory). It can be found in my computer at:
-C:\\Users\\bercos\\PycharmProjects\\Metocean\\masts_10min\\WRF_500m_all\\KVT_Bjornafjorden_10m_ws10m_xyt.nc4
+C:\\Users\\bercos\\PycharmProjects\\ANN_to_predict_turbulence\\masts_10min\\WRF_500m_all\\KVT_Bjornafjorden_10m_ws10m_xyt.nc4
 
 Then, only the relevant datapoints, close to the bridge pints, are collected and saved in a 'mini-grid' dataset, saved to:
-C:\\Users\\bercos\\PycharmProjects\\Metocean\\WRF_500_interpolated\\WRF_500m_minigrid.nc
+C:\\Users\\bercos\\PycharmProjects\\ANN_to_predict_turbulence\\WRF_500_interpolated\\WRF_500m_minigrid.nc
 """
 
 import os
@@ -19,7 +19,7 @@ def rad(deg):
 def deg(rad):
     return rad*180/np.pi
 
-create_minigrid = False  # if True, when running this file, the miniggrid is created
+create_minigrid = True  # if True, when running this file, the miniggrid is created
 earth_R = 6371*1000  # m. Globally averaged radius of the Earth. https://en.wikipedia.org/wiki/Earth_radius
 lat_mid_Bj = np.deg2rad(60.1086)  # Latitude at the middle of the Bjørnafjord. Used to obtain the Earth circunference at that latitude
 earth_circunf_R_at_lat = earth_R * np.cos(lat_mid_Bj) # IMPORTANT: In Norway (lat ~ 60deg), going 1 deg west is about half the distance (cos(60)) than going 1 deg North! earth_circunf_R_at_lat concerns the circunference when the Earth is cut at lat=60deg
@@ -54,7 +54,7 @@ def bridge_WRF_nodes_coor_func(n_bridge_WRF_nodes = n_bridge_WRF_nodes, bridge_R
 
 def create_minigrid_data_func():
     # Getting raw data. To see names of 'variables' do: print(dataset.variables)
-    folder_loc = os.path.join(os.getcwd(), r'WRF_500m_all/KVT_Bjornafjorden_10m_ws10m_xyt.nc4')  # original raw data file
+    folder_loc = os.path.join(os.getcwd(), r'WRF_500m_all/KVT_Bjornafjorden_wslev1_60m_xyt.nc4')  # original raw data file
     # folder_loc = r'O:\Utbygging\Fagress\BFA40 Konstruksjoner\10 Faggrupper\01 Metocean\Data\Vinddata\3d\Vind\KVT_Bjornafjorden_10m_ws10m_xyt.nc4'  # this doesn't work?
     dataset = netCDF4.Dataset(folder_loc)
 
@@ -87,7 +87,7 @@ def create_minigrid_data_func():
     # Saving new .nc file of the mini-grid
     n_mini_grid_nodes = lat_lon_mini_grid.shape[0]
     n_time_points = dataset.variables['ws'].shape[-1]
-    minidataset = netCDF4.Dataset(os.path.join(os.getcwd(), r'WRF_500m_minigrid.nc'), 'w', format='NETCDF4')
+    minidataset = netCDF4.Dataset(os.path.join(os.getcwd(), r'WRF_500_interpolated', r'WRF_60m_500m_minigrid.nc'), 'w', format='NETCDF4')
     minidataset.createDimension('n_nodes', n_mini_grid_nodes)
     minidataset.createDimension('n_time_points' , n_time_points)
     minidataset_lats = minidataset.createVariable('latitudes' , 'f4', ('n_nodes',))  # f4: 32-bit signed floating point

@@ -365,6 +365,7 @@ def get_all_Iu_with_eurocode(z = 48):
     return Iu
 Iu_EN = get_all_Iu_with_eurocode()
 Iu_14m_EN = get_all_Iu_with_eurocode(z=14.5)
+Iu_18m_EN = get_all_Iu_with_eurocode(z=18)
 
 def generate_new_data(U_min):
     ##################################################################
@@ -739,6 +740,7 @@ def predict_mean_turbulence_with_ML_at_BJ(my_cases, n_hp_trials, name_prefix, n_
             ANN_48m_dict_to_store = {}
             EN_48m_dict_to_store = {}
             EN_14m_dict_to_store = {}
+            EN_18m_dict_to_store = {}
             for idx_pt_to_test, pt_to_test in enumerate(anem_to_test):
                 lens_by_pt = [len(sectors_test_by_pt[i]) for i in range(0, idx_pt_to_test + 1)]  # n_sectors for each point. e.g: [360,360,317,302,360,...]
                 start_idxs_of_each_pt = np.cumsum([0] + lens_by_pt)
@@ -746,12 +748,15 @@ def predict_mean_turbulence_with_ML_at_BJ(my_cases, n_hp_trials, name_prefix, n_
                 ANN_48m_dict_to_store[pt_to_test] = {'sector':sectors_test[pt_slice].tolist(), 'Iu':y_pred_nonnorm[pt_slice].tolist()}
                 EN_48m_dict_to_store[pt_to_test]  = {'sector':sectors_test[pt_slice].tolist(), 'Iu':Iu_EN[pt_to_test]}
                 EN_14m_dict_to_store[pt_to_test]  = {'sector':sectors_test[pt_slice].tolist(), 'Iu':Iu_14m_EN[pt_to_test]}
+                EN_18m_dict_to_store[pt_to_test]  = {'sector':sectors_test[pt_slice].tolist(), 'Iu':Iu_18m_EN[pt_to_test]}
             with open(r'Iu_48m_ANN_preds.json', 'w', encoding='utf-8') as f:
                 json.dump(ANN_48m_dict_to_store, f, ensure_ascii=False, indent=4)
             with open(r'Iu_48m_EN_preds.json', 'w', encoding='utf-8') as f:
                 json.dump(EN_48m_dict_to_store, f, ensure_ascii=False, indent=4)
             with open(r'Iu_14m_EN_preds.json', 'w', encoding='utf-8') as f:
                 json.dump(EN_14m_dict_to_store, f, ensure_ascii=False, indent=4)
+            with open(r'Iu_18m_EN_preds.json', 'w', encoding='utf-8') as f:
+                json.dump(EN_18m_dict_to_store, f, ensure_ascii=False, indent=4)
 
         # PLOT PREDICTIONS
         if make_plots:  # these plots are suitable for the predictions at the middle of Bjørnafjord, where there are no measurements
