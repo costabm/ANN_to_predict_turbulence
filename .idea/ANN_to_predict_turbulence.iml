@@ -14,6 +14,7 @@
       <sourceFolder url="file://$MODULE_DIR$/processed_storm_data" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/results_r2" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/weather_data" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/other" isTestSource="false" />
     </content>
     <orderEntry type="jdk" jdkName="Python 3.7 (base)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
