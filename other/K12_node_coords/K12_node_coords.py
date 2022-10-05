@@ -42,18 +42,29 @@ K12_UTM32_tower_base = np.squeeze(K12_Gs_tower_base_mod + zero_Gs_UTM32)
 K12_UTM32_tower_top = np.array([K12_UTM32_tower_base[0], K12_UTM32_tower_base[1], 220])
 K12_UTM32_tower = np.row_stack([K12_UTM32_tower_base, K12_UTM32_tower_top])
 
-# Desired number of points
-n_girder_nodes = 100
-n_tower_nodes = 100
 
-def K12_girder_node_coords(n_girder_nodes=100):
-    return
+def K12_girder_node_coords(n_girder_nodes=3):
+    x = np.linspace(0, len(K12_UTM32)-1, n_girder_nodes)
+    return np.array([np.interp(x, np.arange(len(K12_UTM32)), K12_UTM32[:, i]) for i in range(3)]).T
 
 
+def K12_tower_node_coords(n_tower_nodes=3):
+    x = np.linspace(0, len(K12_UTM32_tower)-1, n_tower_nodes)
+    return np.array([np.interp(x, np.arange(len(K12_UTM32_tower)), K12_UTM32_tower[:, i]) for i in range(3)]).T
 
 
 # Plotting bridge girder
-plt.figure(figsize=(3, 10), dpi=1000)
-plt.scatter(K12_UTM32[:, 0], K12_UTM32[:, 1], s=0.01)
-plt.axis('equal')
+n_girder_nodes = 50
+n_tower_nodes = 10
+K12_UTM32_interp_girder = K12_girder_node_coords(n_girder_nodes=n_girder_nodes)
+K12_UTM32_interp_tower = K12_tower_node_coords(n_tower_nodes=n_tower_nodes)
+
+fig = plt.figure(figsize=(20, 20), dpi=300)
+ax = fig.add_subplot(projection='3d')
+ax.scatter(K12_UTM32[:, 0], K12_UTM32[:, 1], K12_UTM32[:, 2], s=0.1, c='blue')
+ax.scatter(K12_UTM32_interp_girder[:, 0], K12_UTM32_interp_girder[:, 1], K12_UTM32_interp_girder[:, 2], s=10, c='orange')
+ax.scatter(K12_UTM32_interp_tower[:, 0], K12_UTM32_interp_tower[:, 1], K12_UTM32_interp_tower[:, 2], s=10, c='green')
+ax.set_box_aspect([1,1,0.1])
+ax.set_xlim3d([2.99174018e+05 - 3000, 2.99174018e+05 + 3000])
+ax.set_ylim3d([6.66854498e+06 - 3000, 6.66854498e+06 + 3000])
 plt.show()
