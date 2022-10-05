@@ -42,10 +42,12 @@ K12_UTM32_tower_base = np.squeeze(K12_Gs_tower_base_mod + zero_Gs_UTM32)
 K12_UTM32_tower_top = np.array([K12_UTM32_tower_base[0], K12_UTM32_tower_base[1], 220])
 K12_UTM32_tower = np.row_stack([K12_UTM32_tower_base, K12_UTM32_tower_top])
 
+
 # Get interpolated K12 --GIRDER-- node coordinates in UTM32 (Easting, Northing, height above mean water level)
 def K12_girder_node_coords(n_girder_nodes=3):
     x = np.linspace(0, len(K12_UTM32)-1, n_girder_nodes)
     return np.array([np.interp(x, np.arange(len(K12_UTM32)), K12_UTM32[:, i]) for i in range(3)]).T
+
 
 # Get interpolated K12 --TOWER-- centerline node coordinates in UTM32 (Easting, Northing, height above mean water level)
 def K12_tower_node_coords(n_tower_nodes=3):
