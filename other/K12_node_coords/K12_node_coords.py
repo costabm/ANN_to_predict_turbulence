@@ -32,7 +32,7 @@ K12_Gs_mod = np.array([K12_Gs_mod[:, 1], K12_Gs_mod[:, 0], K12_Gs_mod[:, 2]]).T 
 K12_UTM32 = K12_Gs_mod + zero_Gs_UTM32
 
 # Get K12 --TOWER-- centerline node coordinates in UTM32 (Easting, Northing, height above mean water level)
-K12_Gs_tower_base = df[df['Tag'] == 'A2'].drop_duplicates(subset='NodeID')  # Identified as 'A2' axis in the 'Tag' column.
+K12_Gs_tower_base = df[df['Tag']=='A2'].drop_duplicates(subset='NodeID')  # Identified as 'A2' axis in the 'Tag' column.
 K12_Gs_tower_base = K12_Gs_tower_base[['X', 'Y', 'Z']]
 K12_Gs_tower_base['Z'] = 0  # Z starts at 0 ("Appendix A - SBJ-32-C5-AMC-90-RE-101_1 Drawings binder")
 K12_Gs_tower_base = K12_Gs_tower_base.to_numpy()
@@ -42,12 +42,12 @@ K12_UTM32_tower_base = np.squeeze(K12_Gs_tower_base_mod + zero_Gs_UTM32)
 K12_UTM32_tower_top = np.array([K12_UTM32_tower_base[0], K12_UTM32_tower_base[1], 220])
 K12_UTM32_tower = np.row_stack([K12_UTM32_tower_base, K12_UTM32_tower_top])
 
-
+# Get interpolated K12 --GIRDER-- node coordinates in UTM32 (Easting, Northing, height above mean water level)
 def K12_girder_node_coords(n_girder_nodes=3):
     x = np.linspace(0, len(K12_UTM32)-1, n_girder_nodes)
     return np.array([np.interp(x, np.arange(len(K12_UTM32)), K12_UTM32[:, i]) for i in range(3)]).T
 
-
+# Get interpolated K12 --TOWER-- centerline node coordinates in UTM32 (Easting, Northing, height above mean water level)
 def K12_tower_node_coords(n_tower_nodes=3):
     x = np.linspace(0, len(K12_UTM32_tower)-1, n_tower_nodes)
     return np.array([np.interp(x, np.arange(len(K12_UTM32_tower)), K12_UTM32_tower[:, i]) for i in range(3)]).T
@@ -58,11 +58,10 @@ n_girder_nodes = 50
 n_tower_nodes = 10
 K12_UTM32_interp_girder = K12_girder_node_coords(n_girder_nodes=n_girder_nodes)
 K12_UTM32_interp_tower = K12_tower_node_coords(n_tower_nodes=n_tower_nodes)
-
 fig = plt.figure(figsize=(20, 20), dpi=300)
 ax = fig.add_subplot(projection='3d')
 ax.scatter(K12_UTM32[:, 0], K12_UTM32[:, 1], K12_UTM32[:, 2], s=0.1, c='blue')
-ax.scatter(K12_UTM32_interp_girder[:, 0], K12_UTM32_interp_girder[:, 1], K12_UTM32_interp_girder[:, 2], s=10, c='orange')
+ax.scatter(K12_UTM32_interp_girder[:, 0], K12_UTM32_interp_girder[:, 1], K12_UTM32_interp_girder[:,2], s=10, c='orange')
 ax.scatter(K12_UTM32_interp_tower[:, 0], K12_UTM32_interp_tower[:, 1], K12_UTM32_interp_tower[:, 2], s=10, c='green')
 ax.set_box_aspect([1,1,0.1])
 ax.set_xlim3d([2.99174018e+05 - 3000, 2.99174018e+05 + 3000])
